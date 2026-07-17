@@ -13,7 +13,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 # --- Pfade (bei Bedarf anpassen) ---
-$UeRoot      = "C:\Program Files\Epic Games\UE_5.1"
+$UeRoot      = "O:\UE_5.1"
 $Project     = "$PSScriptRoot\..\ue_project\PalMod\PalMod.uproject"
 $CookedDir   = "$PSScriptRoot\..\ue_project\PalMod\Saved\Cooked\Windows\PalMod\Content"
 $BuildDir    = "$PSScriptRoot\..\build"
@@ -40,8 +40,12 @@ $ResponseFile = "$BuildDir\filelist.txt"
 
 # Cooked-Assets auf die Original-Mount-Pfade des Spiels mappen:
 #   <Cooked>/Pal/Content/...  ->  ../../../Pal/Content/...
+# Nur die SkeletalMesh-Assets selbst kommen ins Pak. Skeleton-, Material- und
+# Physics-Platzhalter bleiben draussen, damit das Spiel seine Originale nutzt.
 $lines = Get-ChildItem $CookedDir -Recurse -File |
     Where-Object { $_.Extension -in ".uasset", ".uexp", ".ubulk" } |
+    Where-Object { $_.BaseName -like "SK_*" -and $_.BaseName -notlike "*_Skeleton" -and
+                   $_.BaseName -notlike "MI_*" -and $_.BaseName -notlike "PA_*" } |
     ForEach-Object {
         $rel = $_.FullName.Substring((Resolve-Path $CookedDir).Path.Length).TrimStart("\")
         "`"$($_.FullName)`" `"../../../Pal/Content/$($rel -replace '\\','/')`""
