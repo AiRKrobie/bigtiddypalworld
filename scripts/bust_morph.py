@@ -50,6 +50,8 @@ def parse_args():
     p.add_argument("--output", required=True, help="Ziel-FBX")
     p.add_argument("--factor", type=float, default=1.5,
                    help="Staerke: 1.0 = unveraendert, 1.5 = deutlich, 2.0 = extrem")
+    p.add_argument("--cleavage", type=float, default=0.65,
+                   help="Trennung der Lobes an der Mittellinie (0=keine, 1=maximal)")
     p.add_argument("--render", default=None,
                    help="Praefix fuer Vorher/Nachher-PNGs (z. B. work/PinkLizard)")
     p.add_argument("--front-axis", choices=["auto", "-y", "+y"], default="auto")
@@ -133,17 +135,26 @@ def main():
         raise RuntimeError(f"Anker-Selektion zu klein ({len(anchors)} Vertices)")
     print(f"Anker: {len(anchors)} von {len(mesh.vertices)} Vertices")
 
-    # Falloff-Zentren pro Seite: Centroid, nach vorn auf den Apex geschoben
-    centers = []
+    # Falloff-Zentren pro Seite: Centroid, nach vorn auf den Apex geschoben,
+    # anschliessend links/rechts symmetrisiert
+    raw_centers = []
     for side_sign in (-1, 1):
         side = [v for v in anchors if (v.co.x or 1e-9) * side_sign > 0]
         if not side:
             continue
         centroid = sum((v.co for v in side), Vector()) / len(side)
         apex_y = max(v.co.y * front for v in side) * front
-        centers.append(Vector((centroid.x, apex_y, centroid.z)))
-    if not centers:
+        raw_centers.append(Vector((centroid.x, apex_y, centroid.z)))
+    if not raw_centers:
         raise RuntimeError("Keine Falloff-Zentren bestimmbar")
+    if len(raw_centers) == 2:
+        cx = sum(abs(c.x) for c in raw_centers) / 2
+        cy = sum(c.y for c in raw_centers) / 2
+        cz = sum(c.z for c in raw_centers) / 2
+        centers = [Vector((-cx, cy, cz)), Vector((cx, cy, cz))]
+    else:
+        centers = raw_centers
+        cx = abs(centers[0].x)
 
     radius = max(max((v.co - c).length for c in centers) for v in anchors) * 0.75
     strength = (args.factor - 1.0) * 0.5 * radius
@@ -164,24 +175,44 @@ def main():
     if args.render:
         render_views(body, front, args.render + "_before", chest_focus)
 
-    # Verschiebung radial von innenliegenden Zentren aus: ergibt eine glatte,
-    # kugelfoermige Woelbung statt Spikes entlang der Einzel-Normalen.
-    inner = [c + Vector((0, -front * radius * 0.6, 0)) for c in centers]
+    # Formmodell: zwei getrennte Lobes statt einer Gesamtwoelbung.
+    # - Jede Seite wird NUR von ihrem eigenen Zentrum verformt
+    # - Dekolleté: Daempfung nahe der Mittellinie trennt die Lobes sichtbar
+    # - Richtung: radial vom innenliegenden, leicht abgesenkten Zentrum
+    #   (Teardrop), gemischt mit Vorwaerts-Projektion statt purer Skalierung
+    inner = [c + Vector((0, -front * radius * 0.6, -radius * 0.18))
+             for c in centers]
+    forward = Vector((0, front, 0))
+    cleave_w = max(cx * 0.9, 1e-6)
     for v in candidates:
-        i, d = min(((i, (v.co - c).length) for i, c in enumerate(centers)),
-                   key=lambda t: t[1])
+        if len(centers) == 2:
+            i = 0 if v.co.x < 0 else 1
+        else:
+            i = 0
+        d = (v.co - centers[i]).length
         fall = max(0.0, 1.0 - (d / radius) ** 2)
         fall = math.sin(fall * math.pi / 2)
-        direction = (v.co - inner[i])
+        if fall <= 0.0:
+            continue
+        # Mittellinien-Daempfung (smoothstep ueber |x|)
+        sep = min(1.0, abs(v.co.x) / cleave_w)
+        sep = sep * sep * (3 - 2 * sep)
+        fall *= args.cleavage * sep + (1.0 - args.cleavage)
+        direction = v.co - inner[i]
         if direction.length < 1e-6:
             continue
-        v.co += direction.normalized() * (strength * fall)
+        direction = (direction.normalized() * 0.7 + forward * 0.3).normalized()
+        v.co += direction * (strength * fall)
     mesh.update()
 
     if args.render:
         render_views(body, front, args.render + "_after", chest_focus)
 
     if not args.no_export:
+        # Armature-Objekt MUSS "Armature" heissen: nur dann laesst der
+        # UE-FBX-Import den Objekt-Knoten weg. Sonst entsteht ein zusaetzlicher
+        # Root-Bone und die Spiel-Animationen greifen nicht mehr (T-Pose).
+        armature.name = "Armature"
         bpy.ops.object.select_all(action="SELECT")
         bpy.ops.export_scene.fbx(
             filepath=args.output,
