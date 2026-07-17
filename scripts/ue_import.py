@@ -124,7 +124,7 @@ def main():
     # Pfad mit Leerzeichen uebersteht -ExecutePythonScript nicht zuverlaessig,
     # daher Uebergabe per Umgebungsvariable (argv nur als Fallback).
     jobs_file = os.environ.get("PALMOD_JOBS") or sys.argv[1]
-    with open(jobs_file, encoding="utf-8") as f:
+    with open(jobs_file, encoding="utf-8-sig") as f:
         jobs = json.load(f)
 
     for job in jobs:
