@@ -1,0 +1,22 @@
+# Tools (werden lokal heruntergeladen, nicht versioniert)
+tools/
+
+# Export- und Arbeitsverzeichnisse (große Binärdaten)
+export/
+work/
+build/
+output/
+
+# FModel-Ausgaben
+Saved/
+
+# Unreal-Engine-Projekt (zu groß für Git, wird lokal erzeugt)
+ue_project/
+
+# Archive
+*.zip
+*.7z
+
+# Blender-Backups
+*.blend1
+*.blend2
