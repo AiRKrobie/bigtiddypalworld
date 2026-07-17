@@ -19,6 +19,7 @@ werden beim Packen ausgeschlossen.
 """
 
 import json
+import os
 import sys
 
 import unreal
@@ -120,7 +121,9 @@ def assign_materials(sk, wanted):
 
 
 def main():
-    jobs_file = sys.argv[1]
+    # Pfad mit Leerzeichen uebersteht -ExecutePythonScript nicht zuverlaessig,
+    # daher Uebergabe per Umgebungsvariable (argv nur als Fallback).
+    jobs_file = os.environ.get("PALMOD_JOBS") or sys.argv[1]
     with open(jobs_file, encoding="utf-8") as f:
         jobs = json.load(f)
 
