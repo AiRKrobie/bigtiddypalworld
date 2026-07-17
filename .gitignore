@@ -24,3 +24,7 @@ src/**/obj/
 # Blender-Backups
 *.blend1
 *.blend2
+
+# Lokales Tooling (ruflo/claude-flow Daemon-State)
+.claude-flow/
+.claude/
