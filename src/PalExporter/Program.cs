@@ -119,7 +119,7 @@ foreach (var (display, code) in resolved)
         continue;
     }
 
-    var exported = new List<string>();
+    var exported = new List<object>();
     foreach (var key in meshKeys)
     {
         var objPath = key[..^".uasset".Length];
@@ -132,7 +132,21 @@ foreach (var (display, code) in resolved)
             targetDir.Create();
             if (exporter.TryWriteToDir(targetDir, out _, out var savedPath))
             {
-                exported.Add(savedPath);
+                // Metadaten fuer den UE-Reimport: Original-Pfade von Skeleton,
+                // Materialien (inkl. Slot-Namen) und PhysicsAsset
+                var slots = sk.SkeletalMaterials.Select((m, i) => new
+                {
+                    slot = m.MaterialSlotName.Text,
+                    material = sk.Materials.ElementAtOrDefault(i)?.GetPathName(),
+                }).ToList();
+                exported.Add(new
+                {
+                    file = savedPath,
+                    assetPath = "/Game/" + objPath["Pal/Content/".Length..],
+                    skeleton = sk.Skeleton.ResolvedObject?.GetPathName(),
+                    physicsAsset = sk.PhysicsAsset.ResolvedObject?.GetPathName(),
+                    materials = slots,
+                });
                 Console.WriteLine($"[{display}] OK: {Path.GetFileName(savedPath)}");
             }
             else Console.WriteLine($"[{display}] Export fehlgeschlagen: {objPath}");
