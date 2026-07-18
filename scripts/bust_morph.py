@@ -61,6 +61,9 @@ def parse_args():
     p.add_argument("--mode", choices=["generate", "dome"], default="generate",
                    help="generate=eigene Brust-Geometrie erzeugen (Standard), "
                         "dome=vorhandene Flaeche verformen (Legacy)")
+    p.add_argument("--jiggle", action="store_true",
+                   help="Jiggle-Bones (breast_l/r) hinzufuegen und die "
+                        "Geometrie daran binden (fuer Physik im Spiel)")
     p.add_argument("--shapekey", action="store_true",
                    help="Morph als Shape Key 'BustSize' statt ins Basis-Mesh "
                         "backen (fuer Laufzeit-Slider via Morph Target)")
@@ -252,19 +255,22 @@ def generate_breasts(body, mesh, centers, front, side, R_lobe, H,
     mat_index = mats.most_common(1)[0][0] if mats else 0
 
     n_old = len(mesh.vertices)
+    up = Vector((0.0, 0.0, 1.0))
     bm = bmesh.new()
     bm.from_mesh(mesh)
 
+    breast_info = []  # je Brust: dict(apex=Vector, side=+/-1, v_start, v_end)
     for i, c in enumerate(centers):
         if len(centers) == 2:
             out = side * (-1.0 if i == 0 else 1.0)
         else:
             out = Vector()
-        zax = (front * 0.92 + out * 0.13 + Vector((0.0, 0.0, -0.08))).normalized()
-        yax = (Vector((0.0, 0.0, 1.0)) - zax * zax.z).normalized()
+        # Anime-Form: praller nach vorn projiziert, leicht angehoben (perky)
+        zax = (front * 0.94 + out * 0.14 + up * 0.05).normalized()
+        yax = (up - zax * zax.z).normalized()
         xax = yax.cross(zax)
 
-        # Koerper-/Fell-Oberflaeche entlang der Dome-Achse finden
+        # Koerper-/Fell-Oberflaeche entlang der Achse finden
         proj_max = 0.0
         for v in candidates:
             rel = v.co - c
@@ -273,30 +279,40 @@ def generate_breasts(body, mesh, centers, front, side, R_lobe, H,
             if lat < R_lobe * 0.8:
                 proj_max = max(proj_max, p)
 
-        Rb = R_lobe * 0.72
-        sink = Rb * 0.45
-        depth = H + sink
-        base = c + zax * (proj_max - sink)
+        Rb = R_lobe * 0.92          # groesser/voller
+        sink = Rb * 0.42
+        depth = (H + sink) * 1.35   # staerkere Vorwaerts-Projektion
+        # Ansatz hoeher auf der Brust
+        base = c + zax * (proj_max - sink) + up * (Rb * 0.18)
+        v_start = len(bm.verts)
 
-        ret = bmesh.ops.create_uvsphere(bm, u_segments=18, v_segments=12,
+        ret = bmesh.ops.create_uvsphere(bm, u_segments=20, v_segments=14,
                                         radius=1.0)
         verts = list(ret["verts"])
-        to_del = [v for v in verts if v.co.z < -0.25]
+        to_del = [v for v in verts if v.co.z < -0.22]
         bmesh.ops.delete(bm, geom=to_del, context="VERTS")
         verts = [v for v in verts if v.is_valid]
 
         for v in verts:
             x, y, z = v.co.x, v.co.y, v.co.z
-            # Teardrop: unten voller, oben schlanker, sanfter Sag
-            fullness = 1.0 + 0.16 * max(0.0, -y) - 0.18 * max(0.0, y)
+            # Perky, rund: voelliger unten, oben nur leicht schmaler,
+            # dezenter Lift statt Haengen
+            fullness = 1.0 + 0.14 * max(0.0, -y) - 0.10 * max(0.0, y)
             x *= fullness
-            y = y * fullness - 0.10 * (1.0 - z)
+            y = y * fullness + 0.06 * (1.0 - z)   # leichter Lift nach oben
             v.co = base + xax * (x * Rb) + yax * (y * Rb) + zax * (z * depth)
 
         new_faces = {f for v in verts for f in v.link_faces}
         for f in new_faces:
             f.smooth = True
             f.material_index = mat_index
+
+        breast_info.append({
+            "apex": base + zax * depth,        # Spitze (fuer Bone-Tail)
+            "root": base,                       # Ansatz (fuer Bone-Head)
+            "side": (-1 if (len(centers) == 2 and i == 0) else 1),
+            "v_start": v_start,
+        })
 
     bm.to_mesh(mesh)
     bm.free()
@@ -330,9 +346,59 @@ def generate_breasts(body, mesh, centers, front, side, R_lobe, H,
                 if vi >= n_old:
                     uvl.data[li].uv = ref_uv[vi]
 
+    # Neue Vertices nach Seite (Vorzeichen entlang 'side') einer Brust zuordnen
+    for bi in breast_info:
+        bi["vidx"] = []
+    for idx in new_idx:
+        s = 1 if full_pos[idx].dot(side) >= 0 else -1
+        target = next((b for b in breast_info if b["side"] == s), breast_info[0])
+        target["vidx"].append(idx)
+
     print(f"Generiert: 2x Teardrop-Halbkugel, {len(full_pos)} neue Vertices, "
           f"Material-Slot {mat_index}")
-    return full_pos
+    return full_pos, breast_info
+
+
+def add_breast_bones(body, mesh, armature, breast_info, height):
+    """Fuegt breast_l/breast_r als Kind-Bones des Brust-Ankers hinzu und
+    bindet die generierte Geometrie daran (Gewicht steigt von Ansatz zu
+    Spitze). Diese Bones werden spaeter physikalisch simuliert (Jiggle).
+    Additive Bones am Ende -- Original-Animationen ignorieren sie."""
+    parent = find_bone(armature, CHEST_WEIGHT_BONES) or armature.data.bones[0]
+    parent_name = parent.name
+    names = {-1: "breast_l", 1: "breast_r"}
+
+    bpy.context.view_layer.objects.active = armature
+    bpy.ops.object.mode_set(mode="EDIT")
+    ebs = armature.data.edit_bones
+    par = ebs.get(parent_name)
+    for bi in breast_info:
+        nm = names[bi["side"]]
+        eb = ebs.new(nm)
+        eb.head = bi["root"]
+        eb.tail = bi["apex"]
+        eb.parent = par
+        eb.use_connect = False
+        bi["bone"] = nm
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+    for bi in breast_info:
+        nm = bi["bone"]
+        vg = body.vertex_groups.get(nm) or body.vertex_groups.new(name=nm)
+        root = bi["root"]
+        apex = bi["apex"]
+        axis = (apex - root)
+        L = max(axis.length, 1e-6)
+        axis = axis / L
+        for idx in bi["vidx"]:
+            # Gewicht ~ Fortschritt entlang der Ansatz->Spitze-Achse
+            t = max(0.0, min(1.0, (mesh.vertices[idx].co - root).dot(axis) / L))
+            w = 0.25 + 0.75 * (t * t)   # Ansatz haelt, Spitze wackelt voll
+            vg.add([idx], w, "REPLACE")
+            # Rest-Gewicht bleibt beim Koerper (Summe wird normalisiert)
+    print(f"Jiggle-Bones: {', '.join(b['bone'] for b in breast_info)} "
+          f"an {parent_name}")
+    return [b["bone"] for b in breast_info]
 
 
 def main():
@@ -366,10 +432,17 @@ def main():
     if args.mode == "generate":
         # Eigene Brust-Geometrie erzeugen statt vorhandene zu verformen
         R_lobe = radius * (0.62 if len(centers) == 2 else 0.85)
-        displaced = generate_breasts(
+        displaced, breast_info = generate_breasts(
             body, mesh, centers, front, side, R_lobe, H,
             info["candidates"], info["weight_on"], info["companion_ids"],
             height)
+        bones = []
+        if args.jiggle:
+            bones = add_breast_bones(body, mesh, armature, breast_info, height)
+            # Bone-Namen fuers Physics-Setup neben die FBX schreiben
+            side_path = args.output.rsplit(".", 1)[0] + "_jigglebones.txt"
+            with open(side_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(bones))
         finish(args, body, mesh, armature, front, side, displaced, chest_focus)
         return
 
