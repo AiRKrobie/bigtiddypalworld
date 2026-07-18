@@ -259,64 +259,66 @@ def generate_breasts(body, mesh, centers, front, side, R_lobe, H,
     bm = bmesh.new()
     bm.from_mesh(mesh)
 
-    breast_info = []  # je Brust: dict(apex=Vector, side=+/-1, v_start, v_end)
-    for i, c in enumerate(centers):
-        if len(centers) == 2:
-            out = side * (-1.0 if i == 0 else 1.0)
-        else:
-            out = Vector()
-        # Anime-Form: praller nach vorn projiziert, leicht angehoben (perky)
-        zax = (front * 0.94 + out * 0.14 + up * 0.05).normalized()
-        yax = (up - zax * zax.z).normalized()
-        xax = yax.cross(zax)
+    # --- Neue, runde Konstruktion ---
+    # Groesse aus Faktor: Rb = Kugelradius. Tiefe ~ Rb -> RUND, nicht spitz.
+    # Zwei Kugeln nahe der Mittellinie -> Innenkanten treffen = Dekolleté.
+    Rb = max(H * 1.15, R_lobe * 0.85)
+    depth = Rb * 0.92                       # rund (leicht < Rb fuer natuerl. Front)
+    sink = Rb * 0.60                         # Ruecken tief im Koerper
+    cx = Rb * 0.82                           # halber Abstand -> Kugeln beruehren sich
+    # Gemeinsamer Mittelpunkt der Brust (auf die Mittellinie projiziert)
+    mid = sum(centers, Vector()) / len(centers)
+    mid = mid - side * mid.dot(side)         # x auf Mittellinie
+    rise = Rb * 0.30                         # etwas anheben
+    # Front-Achse: nach vorn, leicht nach unten (natuerlicher Fall), KEIN Auswaerts
+    zax = (front - up * 0.08).normalized()
+    yax = (up - zax * (up.dot(zax))).normalized()
+    xax = yax.cross(zax)
 
-        # Koerper-/Fell-Oberflaeche entlang der Achse finden
-        proj_max = 0.0
+    breast_info = []
+    for sgn in ((-1, 1) if len(centers) == 2 else (0,)):
+        cline = mid + side * (sgn * cx) + up * rise
+        # Koerperoberflaeche vor diesem Punkt finden
+        proj_max = -1e9
         for v in candidates:
-            rel = v.co - c
+            rel = v.co - cline
             p = rel.dot(zax)
             lat = (rel - zax * p).length
-            if lat < R_lobe * 0.8:
+            if lat < Rb * 0.7:
                 proj_max = max(proj_max, p)
-
-        Rb = R_lobe * 0.90
-        sink = Rb * 0.55            # Ruecken tiefer im Koerper -> kein Ball-Rand
-        depth = (H + sink) * 1.25
-        # Deutlich hoeher ansetzen (auf die Brust, nicht den Bauch)
-        base = c + zax * (proj_max - sink) + up * (Rb * 0.55)
+        if proj_max < -1e8:
+            proj_max = 0.0
+        base = cline + zax * (proj_max - sink)
         v_start = len(bm.verts)
 
-        ret = bmesh.ops.create_uvsphere(bm, u_segments=20, v_segments=14,
+        ret = bmesh.ops.create_uvsphere(bm, u_segments=24, v_segments=16,
                                         radius=1.0)
-        verts = list(ret["verts"])
-        to_del = [v for v in verts if v.co.z < -0.30]
+        verts = [v for v in ret["verts"]]
+        to_del = [v for v in verts if v.co.z < -0.35]
         bmesh.ops.delete(bm, geom=to_del, context="VERTS")
         verts = [v for v in verts if v.is_valid]
 
         for v in verts:
             x, y, z = v.co.x, v.co.y, v.co.z
-            fullness = 1.0 + 0.14 * max(0.0, -y) - 0.10 * max(0.0, y)
-            x *= fullness
-            y = y * fullness + 0.06 * (1.0 - z)
-            sphere_co = base + xax * (x * Rb) + yax * (y * Rb) + zax * (z * depth)
-            # Rand weich in die Koerperoberflaeche einblenden: nahe der
-            # Frontspitze (grosses z) volle Kugel, zum Rand hin (kleines z)
-            # auf die naechste Koerperflaeche ziehen -> integrierte Woelbung
-            blend = max(0.0, min(1.0, (z + 0.30) / 0.75))  # 0=Rand ..1=Front
+            # Fast kugelrund; nur minimal voller unten fuer natuerlichen Fall
+            fullness = 1.0 + 0.08 * max(0.0, -y)
+            sphere_co = (base + xax * (x * Rb * fullness)
+                         + yax * (y * Rb * fullness) + zax * (z * depth))
+            # Rand weich in die Koerperoberflaeche blenden (integrierte Woelbung)
+            blend = max(0.0, min(1.0, (z + 0.35) / 0.85))
             blend = blend * blend * (3 - 2 * blend)
             _, k, _ = tree.find(sphere_co)
             surf_pt = surf_data[k][0]
-            v.co = surf_pt.lerp(sphere_co, 0.15 + 0.85 * blend)
+            v.co = surf_pt.lerp(sphere_co, 0.12 + 0.88 * blend)
 
-        new_faces = {f for v in verts for f in v.link_faces}
-        for f in new_faces:
+        for f in {f for v in verts for f in v.link_faces}:
             f.smooth = True
             f.material_index = mat_index
 
         breast_info.append({
-            "apex": base + zax * depth,        # Spitze (fuer Bone-Tail)
-            "root": base,                       # Ansatz (fuer Bone-Head)
-            "side": (-1 if (len(centers) == 2 and i == 0) else 1),
+            "apex": base + zax * depth,
+            "root": base,
+            "side": (sgn if sgn != 0 else 1),
             "v_start": v_start,
         })
 
