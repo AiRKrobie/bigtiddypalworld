@@ -22,6 +22,12 @@ function ConvertTo-GamePath($p) {
 }
 
 $manifest = Get-Content "$Root\export\manifest.json" -Raw | ConvertFrom-Json
+$overrides = @{}
+if (Test-Path "$Root\data\pal_overrides.json") {
+    $json = Get-Content "$Root\data\pal_overrides.json" -Raw | ConvertFrom-Json
+    $json.PSObject.Properties | Where-Object { $_.Name -notlike "_*" } |
+        ForEach-Object { $overrides[$_.Name] = $_.Value }
+}
 New-Item -ItemType Directory -Force "$Root\work\renders" | Out-Null
 
 $jobs = @()
@@ -37,9 +43,17 @@ foreach ($entry in $manifest) {
         }
         $name = [IO.Path]::GetFileNameWithoutExtension($psk)
         $fbx = "$Root\work\$($name)_morphed.fbx"
-        Write-Host "== Morphe $name ($($entry.display)) =="
+        $meshFactor = $Factor
+        $extraArgs = @()
+        if ($overrides.ContainsKey($name)) {
+            $o = $overrides[$name]
+            if ($o.factor) { $meshFactor = $o.factor }
+            if ($o.cleavage) { $extraArgs += @("--cleavage", $o.cleavage) }
+        }
+        Write-Host "== Morphe $name ($($entry.display), Faktor $meshFactor) =="
         & $Blender --background --python "$Root\scripts\bust_morph.py" -- `
-            --input $psk --output $fbx --factor $Factor --shapekey `
+            --input $psk --output $fbx --factor $meshFactor --shapekey `
+            @extraArgs `
             --render "$Root\work\renders\$name" > "$Root\work\renders\$name.log"
         if (-not (Select-String -Path "$Root\work\renders\$name.log" -Pattern "Exportiert" -Quiet)) {
             $reason = (Select-String -Path "$Root\work\renders\$name.log" `

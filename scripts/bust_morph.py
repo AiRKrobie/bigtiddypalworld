@@ -192,6 +192,9 @@ def main():
 
     radius = max(max((v.co - c).length for c in centers) for v in anchors) * 0.75
     strength = (args.factor - 1.0) * 0.5 * radius
+    # Deckel relativ zur Koerpergroesse: schmale Figuren mit breiter
+    # Ankerregion bekommen sonst unproportionale Ballons
+    strength = min(strength, 0.085 * height * (args.factor / 2.5))
 
     reach = radius * 1.25
     candidates = [v for v in mesh.vertices
@@ -234,6 +237,29 @@ def main():
         direction = (direction.normalized() * 0.62 + front * 0.28
                      + lobe_out * 0.10).normalized()
         displaced[v.index] = v.co + direction * (strength * fall)
+
+    # Delta-Glaettung: Verschiebungsfeld ueber die Mesh-Nachbarschaft
+    # mitteln -- rundet Low-Poly-Facetten und weicht die Raender aus.
+    # Nicht verschobene Nachbarn zaehlen als Null-Delta, dadurch laeuft
+    # der Rand sanft aus.
+    adjacency = {}
+    for e in mesh.edges:
+        a, b = e.vertices
+        adjacency.setdefault(a, []).append(b)
+        adjacency.setdefault(b, []).append(a)
+    deltas = {i: displaced[i] - mesh.vertices[i].co for i in displaced}
+    for _ in range(2):
+        smoothed = {}
+        for i, d in deltas.items():
+            nbrs = adjacency.get(i, [])
+            if nbrs:
+                avg = sum((deltas.get(j, Vector()) for j in nbrs),
+                          Vector()) / len(nbrs)
+                smoothed[i] = d * 0.45 + avg * 0.55
+            else:
+                smoothed[i] = d
+        deltas = smoothed
+    displaced = {i: mesh.vertices[i].co + d for i, d in deltas.items()}
 
     if args.shapekey:
         # Basis bleibt Original; Morph landet im Shape Key "BustSize",
@@ -295,6 +321,8 @@ def render_views(body, front, side, prefix, focus=None):
 
     cam_data = bpy.data.cameras.get("preview_cam") or bpy.data.cameras.new("preview_cam")
     cam_data.type = "ORTHO"
+    # Grosse Pals: Kamera steht weiter weg als die Standard-Clipping-Distanz
+    cam_data.clip_end = max(1000.0, size * 20)
     cam = bpy.data.objects.get("preview_cam_obj")
     if cam is None:
         cam = bpy.data.objects.new("preview_cam_obj", cam_data)
