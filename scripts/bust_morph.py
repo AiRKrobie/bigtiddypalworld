@@ -20,6 +20,7 @@ import math
 import os
 import sys
 
+import bmesh
 import bpy
 from mathutils import Vector
 
@@ -126,20 +127,9 @@ def detect_front(armature):
     return Vector((0.0, -1.0, 0.0))
 
 
-def main():
-    args = parse_args()
-    bpy.ops.wm.read_factory_settings(use_empty=True)
-    body, armature = import_psk(args.input)
-    mesh = body.data
-
-    front = detect_front(armature)
-    side = front.cross(Vector((0.0, 0.0, 1.0)))
-    print(f"Front={tuple(front)}  Seite={tuple(side)}")
-
-    zs = [v.co.z for v in mesh.vertices]
-    height = max(zs) - min(zs)
-    print(f"Mesh-Hoehe: {height:.1f} Einheiten, {len(mesh.vertices)} Vertices")
-
+def analyze(body, mesh, armature, front, side, height):
+    """Selektiert Brustregion, bestimmt Zentren/Radius. Laeuft zweimal:
+    vor und nach der Subdivision (Vertex-Indizes aendern sich)."""
     lower = find_bone(armature, BAND_LOWER_BONES)
     upper = find_bone(armature, BAND_UPPER_BONES)
     if lower is None or upper is None:
@@ -147,7 +137,6 @@ def main():
                            + ", ".join(b.name for b in armature.data.bones))
     band_lo = lower.head_local.z - 0.02 * height
     band_hi = upper.head_local.z + 0.02 * height
-    print(f"Band z=[{band_lo:.2f}, {band_hi:.2f}]")
 
     group_ids = {g.index for g in body.vertex_groups
                  if g.name.lower() in CHEST_WEIGHT_BONES}
@@ -168,7 +157,6 @@ def main():
                        for g in v.groups)]
     if len(anchors) < 20:
         raise RuntimeError(f"Anker-Selektion zu klein ({len(anchors)} Vertices)")
-    print(f"Anker: {len(anchors)} von {len(mesh.vertices)} Vertices")
 
     # Zentren pro Seite: Centroid, auf den Front-Apex geschoben, symmetrisiert
     raw = []
@@ -191,57 +179,120 @@ def main():
         cs = abs(centers[0].dot(side))
 
     radius = max(max((v.co - c).length for c in centers) for v in anchors) * 0.75
-    strength = (args.factor - 1.0) * 0.5 * radius
-    # Deckel relativ zur Koerpergroesse: schmale Figuren mit breiter
-    # Ankerregion bekommen sonst unproportionale Ballons
-    strength = min(strength, 0.085 * height * (args.factor / 2.5))
-
     reach = radius * 1.25
     candidates = [v for v in mesh.vertices
                   if v.co.dot(front) > -0.05 * height
                   and weight_on(v, exclude_ids) < EXCLUDE_WEIGHT
                   and min((v.co - c).length for c in centers) <= reach]
+    return {"anchors": anchors, "centers": centers, "cs": cs,
+            "radius": radius, "candidates": candidates,
+            "weight_on": weight_on, "companion_ids": companion_ids}
+
+
+def subdivide_region(mesh, cand_idx, cuts):
+    """Unterteilt die Flaechen der Brustregion: erschafft die Geometrie,
+    aus der sich echte Rundungen formen lassen (flache Low-Poly-Brustkoerbe
+    haben sonst zu wenige Vertices fuer eine Brustform)."""
+    bm = bmesh.new()
+    bm.from_mesh(mesh)
+    bm.verts.ensure_lookup_table()
+    faces = [f for f in bm.faces if any(v.index in cand_idx for v in f.verts)]
+    edges = list({e for f in faces for e in f.edges})
+    if edges:
+        bmesh.ops.subdivide_edges(bm, edges=edges, cuts=cuts,
+                                  use_grid_fill=True)
+    bm.to_mesh(mesh)
+    bm.free()
+    mesh.update()
+
+
+def main():
+    args = parse_args()
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    body, armature = import_psk(args.input)
+    mesh = body.data
+
+    front = detect_front(armature)
+    side = front.cross(Vector((0.0, 0.0, 1.0)))
+    print(f"Front={tuple(front)}  Seite={tuple(side)}")
+
+    zs = [v.co.z for v in mesh.vertices]
+    height = max(zs) - min(zs)
+    print(f"Mesh-Hoehe: {height:.1f} Einheiten, {len(mesh.vertices)} Vertices")
+
+    # Pass 1: Region auf Original-Topologie bestimmen, dann unterteilen
+    info = analyze(body, mesh, armature, front, side, height)
+    cand_idx = {v.index for v in info["candidates"]}
+    cuts = 2 if len(info["anchors"]) < 70 else 1
+    n_before = len(mesh.vertices)
+    subdivide_region(mesh, cand_idx, cuts)
+    print(f"Subdivision (cuts={cuts}): {n_before} -> {len(mesh.vertices)} Vertices")
+
+    # Pass 2: Selektion auf der neuen Topologie
+    info = analyze(body, mesh, armature, front, side, height)
+    anchors = info["anchors"]
+    centers = info["centers"]
+    cs = info["cs"]
+    radius = info["radius"]
+    candidates = info["candidates"]
+    weight_on = info["weight_on"]
+    companion_ids = info["companion_ids"]
+    print(f"Anker: {len(anchors)} von {len(mesh.vertices)} Vertices")
+
+    # Dome-Hoehe: wie bisher skaliert und relativ zur Koerpergroesse gedeckelt
+    H = (args.factor - 1.0) * 0.5 * radius
+    H = min(H, 0.085 * height * (args.factor / 2.5))
     print(f"Zentren={[tuple(round(x, 1) for x in c) for c in centers]}  "
-          f"Radius={radius:.1f}  Verschiebung max={strength:.1f}  "
-          f"Verschoben werden {len(candidates)} Vertices")
+          f"Radius={radius:.1f}  Dome-Hoehe={H:.1f}  "
+          f"Region: {len(candidates)} Vertices")
 
     chest_focus = (sum(centers, Vector()) / len(centers), radius * 3.5)
     if args.render:
         render_views(body, front, side, args.render + "_before", chest_focus)
 
-    inner = [c - front * (radius * 0.6) + Vector((0, 0, -radius * 0.25))
-             for c in centers]
+    # Dome-Projektion: pro Seite eine Ziel-Halbkugel (leicht nach aussen und
+    # unten geneigt). Koerper-Vertices werden AUF die Dome-Flaeche gehoben --
+    # das ERSCHAFFT eine Brustform auch auf voellig flachen Brustkoerben,
+    # statt vorhandene Flaechen nur aufzublasen. Fell/Haar-Schalen werden
+    # additiv mitgeschoben, damit sie ueber der Form liegen bleiben.
+    n_axes = []
+    for i in range(len(centers)):
+        if len(centers) == 2:
+            lobe_out = side * (-1.0 if i == 0 else 1.0)
+        else:
+            lobe_out = Vector()
+        n_axes.append((front * 0.9 + lobe_out * 0.14
+                       + Vector((0.0, 0.0, -0.10))).normalized())
+    R_lobe = radius * (0.62 if len(centers) == 2 else 0.85)
     cleave_w = max(cs * 0.9, 1e-6)
     displaced = {}
     for v in candidates:
         i = 0 if (len(centers) == 2 and v.co.dot(side) < 0) else len(centers) - 1
-        d = (v.co - centers[i]).length
-        fall = max(0.0, 1.0 - (d / radius) ** 2)
-        fall = math.sin(fall * math.pi / 2)
-        if fall <= 0.0:
+        rel = v.co - centers[i]
+        n = n_axes[i]
+        proj = rel.dot(n)
+        lat = (rel - n * proj).length
+        if lat >= R_lobe or proj < -0.4 * R_lobe:
             continue
+        dome = H * (1.0 - (lat / R_lobe) ** 2) ** 0.75
+        # Teardrop: unterhalb des Zentrums voller, oben sanft auslaufend
+        dz = (v.co.z - centers[i].z) / R_lobe
+        vert = 1.0 + 0.18 * max(0.0, -dz) - 0.30 * max(0.0, dz)
+        dome *= max(0.15, vert)
         # Dekolleté: Mittellinien-Daempfung trennt die Lobes
         sep = min(1.0, abs(v.co.dot(side)) / cleave_w)
         sep = sep * sep * (3 - 2 * sep)
-        fall *= args.cleavage * sep + (1.0 - args.cleavage)
-        # Teardrop-Profil: unterhalb des Zentrums voller, nach oben sanft
-        # auslaufend statt kugelsymmetrisch
-        dz = (v.co.z - centers[i].z) / radius
-        vert = 1.0 + 0.22 * max(0.0, -dz) - 0.38 * max(0.0, dz)
-        fall *= max(0.15, vert)
-        direction = v.co - inner[i]
-        if direction.length < 1e-6:
-            continue
-        # Leichte Aussen-Neigung der Lobes + Vorwaerts-Projektion
-        lobe_out = side * (-1.0 if i == 0 else 1.0)
-        direction = (direction.normalized() * 0.62 + front * 0.28
-                     + lobe_out * 0.10).normalized()
-        displaced[v.index] = v.co + direction * (strength * fall)
+        dome *= args.cleavage * sep + (1.0 - args.cleavage)
+        if weight_on(v, companion_ids) >= 0.5:
+            disp = dome * 0.9  # Fell-Schale: additiv verschieben
+        else:
+            disp = dome - max(0.0, proj)  # Flaeche auf die Dome-Form heben
+            if disp <= 0.0:
+                continue
+        displaced[v.index] = v.co + n * disp
 
     # Delta-Glaettung: Verschiebungsfeld ueber die Mesh-Nachbarschaft
-    # mitteln -- rundet Low-Poly-Facetten und weicht die Raender aus.
-    # Nicht verschobene Nachbarn zaehlen als Null-Delta, dadurch laeuft
-    # der Rand sanft aus.
+    # mitteln -- rundet Facetten und weicht die Raender aus.
     adjacency = {}
     for e in mesh.edges:
         a, b = e.vertices
