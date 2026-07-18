@@ -55,6 +55,9 @@ def parse_args():
     p.add_argument("--no-export", action="store_true")
     p.add_argument("--bone-axis-primary", default="Y")
     p.add_argument("--bone-axis-secondary", default="X")
+    p.add_argument("--shapekey", action="store_true",
+                   help="Morph als Shape Key 'BustSize' statt ins Basis-Mesh "
+                        "backen (fuer Laufzeit-Slider via Morph Target)")
     return p.parse_args(argv)
 
 
@@ -201,9 +204,10 @@ def main():
     if args.render:
         render_views(body, front, side, args.render + "_before", chest_focus)
 
-    inner = [c - front * (radius * 0.6) + Vector((0, 0, -radius * 0.18))
+    inner = [c - front * (radius * 0.6) + Vector((0, 0, -radius * 0.25))
              for c in centers]
     cleave_w = max(cs * 0.9, 1e-6)
+    displaced = {}
     for v in candidates:
         i = 0 if (len(centers) == 2 and v.co.dot(side) < 0) else len(centers) - 1
         d = (v.co - centers[i]).length
@@ -211,15 +215,37 @@ def main():
         fall = math.sin(fall * math.pi / 2)
         if fall <= 0.0:
             continue
+        # Dekolleté: Mittellinien-Daempfung trennt die Lobes
         sep = min(1.0, abs(v.co.dot(side)) / cleave_w)
         sep = sep * sep * (3 - 2 * sep)
         fall *= args.cleavage * sep + (1.0 - args.cleavage)
+        # Teardrop-Profil: unterhalb des Zentrums voller, nach oben sanft
+        # auslaufend statt kugelsymmetrisch
+        dz = (v.co.z - centers[i].z) / radius
+        vert = 1.0 + 0.22 * max(0.0, -dz) - 0.38 * max(0.0, dz)
+        fall *= max(0.15, vert)
         direction = v.co - inner[i]
         if direction.length < 1e-6:
             continue
-        direction = (direction.normalized() * 0.7 + front * 0.3).normalized()
-        v.co += direction * (strength * fall)
-    mesh.update()
+        # Leichte Aussen-Neigung der Lobes + Vorwaerts-Projektion
+        lobe_out = side * (-1.0 if i == 0 else 1.0)
+        direction = (direction.normalized() * 0.62 + front * 0.28
+                     + lobe_out * 0.10).normalized()
+        displaced[v.index] = v.co + direction * (strength * fall)
+
+    if args.shapekey:
+        # Basis bleibt Original; Morph landet im Shape Key "BustSize",
+        # den UE als Morph Target importiert (Laufzeit-Steuerung)
+        body.shape_key_add(name="Basis", from_mix=False)
+        key = body.shape_key_add(name="BustSize", from_mix=False)
+        for idx, co in displaced.items():
+            key.data[idx].co = co
+        key.value = 1.0  # fuer die Vorschau-Renders
+        print(f"Shape Key 'BustSize' mit {len(displaced)} Vertices angelegt")
+    else:
+        for idx, co in displaced.items():
+            mesh.vertices[idx].co = co
+        mesh.update()
 
     if args.render:
         render_views(body, front, side, args.render + "_after", chest_focus)
