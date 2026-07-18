@@ -262,17 +262,17 @@ def generate_breasts(body, mesh, centers, front, side, R_lobe, H,
     bm = bmesh.new()
     bm.from_mesh(mesh)
 
-    # --- Neue, runde Konstruktion ---
-    # Groesse aus Faktor: Rb = Kugelradius. Tiefe ~ Rb -> RUND, nicht spitz.
-    # Zwei Kugeln nahe der Mittellinie -> Innenkanten treffen = Dekolleté.
-    Rb = max(H * 1.15, R_lobe * 0.85)
-    depth = Rb * 0.92                       # rund (leicht < Rb fuer natuerl. Front)
-    sink = Rb * 0.60                         # Ruecken tief im Koerper
-    cx = Rb * 0.82                           # halber Abstand -> Kugeln beruehren sich
-    # Gemeinsamer Mittelpunkt der Brust (auf die Mittellinie projiziert)
+    # --- Silhouette-Konstruktion: gross, nach vorn, tiefe Cleavage ---
+    # Groesser und staerker projiziert, damit die FORM eindeutig als Brust
+    # liest (unabhaengig von Farbe/Licht). Kugeln ueberlappen an der Mitte
+    # -> tiefe Trennung.
+    Rb = max(H * 1.45, R_lobe * 1.05)
+    depth = Rb * 1.05                        # deutlich nach vorn (Silhouette)
+    sink = Rb * 0.55
+    cx = Rb * 0.68                           # nah -> Ueberlappung = tiefe Cleavage
     mid = sum(centers, Vector()) / len(centers)
     mid = mid - side * mid.dot(side)         # x auf Mittellinie
-    rise = Rb * 0.30                         # etwas anheben
+    rise = Rb * 0.35                         # anheben
     # Front-Achse: nach vorn, leicht nach unten (natuerlicher Fall), KEIN Auswaerts
     zax = (front - up * 0.08).normalized()
     yax = (up - zax * (up.dot(zax))).normalized()
@@ -303,12 +303,14 @@ def generate_breasts(body, mesh, centers, front, side, R_lobe, H,
 
         for v in verts:
             x, y, z = v.co.x, v.co.y, v.co.z
-            # Weiche Tropfenform: voller unten, oben leicht verjuengt,
-            # dezenter natuerlicher Fall (Anime-Brust statt harter Kugel)
-            fullness = 1.0 + 0.20 * max(0.0, -y) - 0.06 * max(0.0, y)
-            droop = -0.05 * (1.0 - z)   # Front sackt minimal ab
+            # Volle Tropfenform: unten voller, oben leicht verjuengt
+            fullness = 1.0 + 0.24 * max(0.0, -y) - 0.06 * max(0.0, y)
+            droop = -0.06 * (1.0 - z)
+            # Unterbrust-Knick: unteres Drittel kruemmt zum Koerper zurueck
+            tuck = max(0.0, -y - 0.35) * 0.7
             sphere_co = (base + xax * (x * Rb * fullness)
-                         + yax * (y * Rb * fullness + droop * Rb) + zax * (z * depth))
+                         + yax * (y * Rb * fullness + droop * Rb)
+                         + zax * ((z - tuck) * depth))
             blend = max(0.0, min(1.0, (z + 0.35) / 0.85))
             blend = blend * blend * (3 - 2 * blend)
             _, k, _ = tree.find(sphere_co)
@@ -331,7 +333,7 @@ def generate_breasts(body, mesh, centers, front, side, R_lobe, H,
     bikini_idx = None
     if make_bikini:
         bikini_mat = bpy.data.materials.new("Bikini")
-        bikini_mat.diffuse_color = (0.95, 0.10, 0.45, 1.0)  # pink (Workbench)
+        bikini_mat.diffuse_color = (0.02, 0.02, 0.03, 1.0)  # schwarz (Kontrast)
         mesh.materials.append(bikini_mat)
         bikini_idx = len(mesh.materials) - 1
         generate_bikini(bm, breast_info, bikini_idx, up, side, front)

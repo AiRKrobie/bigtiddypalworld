@@ -116,7 +116,7 @@ def ensure_bikini_material():
         col = MEL.create_material_expression(
             mat, unreal.MaterialExpressionConstant3Vector, -400, 0)
         col.set_editor_property("constant",
-                                unreal.LinearColor(0.95, 0.06, 0.38, 1.0))
+                                unreal.LinearColor(0.015, 0.015, 0.02, 1.0))
         MEL.connect_material_property(col, "",
                                       unreal.MaterialProperty.MP_BASE_COLOR)
         rough = MEL.create_material_expression(
