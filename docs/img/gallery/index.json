@@ -1,0 +1,142 @@
+﻿[
+    {
+        "mesh":  "SK_NightLady",
+        "display":  "Bellanoir",
+        "file":  "docs/img/gallery/SK_NightLady.png"
+    },
+    {
+        "mesh":  "SK_LittleBriarRose",
+        "display":  "Bristla",
+        "file":  "docs/img/gallery/SK_LittleBriarRose.png"
+    },
+    {
+        "mesh":  "SK_VenusFlytrap",
+        "display":  "Carnibora",
+        "file":  "docs/img/gallery/SK_VenusFlytrap.png"
+    },
+    {
+        "mesh":  "SK_RaijinDaughter",
+        "display":  "Dazzi",
+        "file":  "docs/img/gallery/SK_RaijinDaughter.png"
+    },
+    {
+        "mesh":  "SK_RaijinDaughter_Water",
+        "display":  "Dazzi Noct",
+        "file":  "docs/img/gallery/SK_RaijinDaughter_Water.png"
+    },
+    {
+        "mesh":  "SK_QueenBee",
+        "display":  "Elizabee",
+        "file":  "docs/img/gallery/SK_QueenBee.png"
+    },
+    {
+        "mesh":  "SK_FoxExorcist",
+        "display":  "Flaracle",
+        "file":  "docs/img/gallery/SK_FoxExorcist.png"
+    },
+    {
+        "mesh":  "SK_FlowerRabbit",
+        "display":  "Flopie",
+        "file":  "docs/img/gallery/SK_FlowerRabbit.png"
+    },
+    {
+        "mesh":  "SK_OctopusGirl",
+        "display":  "Gloopie",
+        "file":  "docs/img/gallery/SK_OctopusGirl.png"
+    },
+    {
+        "mesh":  "SK_OctopusGirl_Neutral",
+        "display":  "Gloopie Primo",
+        "file":  "docs/img/gallery/SK_OctopusGirl_Neutral.png"
+    },
+    {
+        "mesh":  "SK_IceWitch",
+        "display":  "Icelyn",
+        "file":  "docs/img/gallery/SK_IceWitch.png"
+    },
+    {
+        "mesh":  "SK_CatMage",
+        "display":  "Katress",
+        "file":  "docs/img/gallery/SK_CatMage.png"
+    },
+    {
+        "mesh":  "SK_CatMage_Fire",
+        "display":  "Katress Ignis",
+        "file":  "docs/img/gallery/SK_CatMage_Fire.png"
+    },
+    {
+        "mesh":  "SK_SleeveRabbit",
+        "display":  "Lapure",
+        "file":  "docs/img/gallery/SK_SleeveRabbit.png"
+    },
+    {
+        "mesh":  "SK_PinkLizard",
+        "display":  "Lovander",
+        "file":  "docs/img/gallery/SK_PinkLizard.png"
+    },
+    {
+        "mesh":  "SK_LeafPrincess",
+        "display":  "Lullu",
+        "file":  "docs/img/gallery/SK_LeafPrincess.png"
+    },
+    {
+        "mesh":  "SK_Mutant",
+        "display":  "Lunaris",
+        "file":  "docs/img/gallery/SK_Mutant.png"
+    },
+    {
+        "mesh":  "SK_LilyQueen_Ice",
+        "display":  "Lyleen",
+        "file":  "docs/img/gallery/SK_LilyQueen_Ice.png"
+    },
+    {
+        "mesh":  "SK_LilyQueen",
+        "display":  "Lyleen",
+        "file":  "docs/img/gallery/SK_LilyQueen.png"
+    },
+    {
+        "mesh":  "SK_GhostRabbit",
+        "display":  "Nitemary",
+        "file":  "docs/img/gallery/SK_GhostRabbit.png"
+    },
+    {
+        "mesh":  "SK_GhostRabbit_Grass",
+        "display":  "Nitemary Botan",
+        "file":  "docs/img/gallery/SK_GhostRabbit_Grass.png"
+    },
+    {
+        "mesh":  "SK_BadCatgirl",
+        "display":  "Nyafia",
+        "file":  "docs/img/gallery/SK_BadCatgirl.png"
+    },
+    {
+        "mesh":  "SK_FlowerDoll",
+        "display":  "Petallia",
+        "file":  "docs/img/gallery/SK_FlowerDoll.png"
+    },
+    {
+        "mesh":  "SK_FlowerDoll_Fire",
+        "display":  "Petallia Ignis",
+        "file":  "docs/img/gallery/SK_FlowerDoll_Fire.png"
+    },
+    {
+        "mesh":  "SK_BlueberryFairy",
+        "display":  "Prunelia",
+        "file":  "docs/img/gallery/SK_BlueberryFairy.png"
+    },
+    {
+        "mesh":  "SK_Sekhmet",
+        "display":  "Sekhmet",
+        "file":  "docs/img/gallery/SK_Sekhmet.png"
+    },
+    {
+        "mesh":  "SK_MoonQueen",
+        "display":  "Selyne",
+        "file":  "docs/img/gallery/SK_MoonQueen.png"
+    },
+    {
+        "mesh":  "SK_GrimGirl",
+        "display":  "Splatterina",
+        "file":  "docs/img/gallery/SK_GrimGirl.png"
+    }
+]

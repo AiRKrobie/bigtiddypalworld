@@ -7,9 +7,9 @@ deinstallierbar.
 *Body mod for 20+ female Pals in Palworld with an in-game size slider —
 [English quick install below](#english-quick-install).*
 
-| Vorher | Nachher (Slider 1.0) |
-|---|---|
-| ![Original](docs/img/lovander_before.png) | ![Morphed](docs/img/lovander_after.png) |
+![Lovander Vorher/Nachher](docs/img/gallery/SK_PinkLizard.png)
+
+> Vorher/Nachher aller Modelle in der **[Galerie](#galerie--vorhernachher)** weiter unten.
 
 ## Features
 
@@ -21,8 +21,10 @@ deinstallierbar.
 - **Größen-Slider im Spiel** (0.0–1.5) über ein UE4SS-Lua-Mod:
   Die Vergrößerung steckt als *Morph Target* im Mesh — bei Wert 0 sieht alles
   aus wie im Original-Spiel
-- **Natürliche Form**: Zwei-Lobe-Modell mit Dekolleté und Teardrop-Profil
-  statt platter Skalierung
+- **Eigens generierte Geometrie**: Seit v1.2.0 werden echte, glatte
+  Teardrop-Brüste als neue Geometrie erzeugt und ins Mesh integriert
+  (mit übernommenen Skinning-Gewichten, UVs und Material) — statt den
+  vorhandenen Brustkorb nur zu verformen
 - **Original-Animationen, -Texturen und -Materialien** bleiben vollständig
   erhalten (Referenz-Skelett wird beim Bauen bit-genau gegen das Original
   verifiziert)
@@ -45,6 +47,127 @@ mit UE4SS-Einrichtung. Kurzfassung:
 3. Spiel starten — **F7** größer, **F6** kleiner, Wert wird gespeichert
 
 Deinstallation: die `.pak` aus `~mods` löschen, fertig.
+
+## Galerie – Vorher/Nachher
+
+Alle enthaltenen Modelle bei Slider-Wert 1.0. Graustufen-Renders aus der Build-Pipeline (Blender Workbench).
+
+<details>
+<summary><b>Alle 28 Modelle anzeigen</b></summary>
+
+**Bellanoir**
+
+![Bellanoir](docs/img/gallery/SK_NightLady.png)
+
+**Bristla**
+
+![Bristla](docs/img/gallery/SK_LittleBriarRose.png)
+
+**Carnibora**
+
+![Carnibora](docs/img/gallery/SK_VenusFlytrap.png)
+
+**Dazzi**
+
+![Dazzi](docs/img/gallery/SK_RaijinDaughter.png)
+
+**Dazzi Noct**
+
+![Dazzi Noct](docs/img/gallery/SK_RaijinDaughter_Water.png)
+
+**Elizabee**
+
+![Elizabee](docs/img/gallery/SK_QueenBee.png)
+
+**Flaracle**
+
+![Flaracle](docs/img/gallery/SK_FoxExorcist.png)
+
+**Flopie**
+
+![Flopie](docs/img/gallery/SK_FlowerRabbit.png)
+
+**Gloopie**
+
+![Gloopie](docs/img/gallery/SK_OctopusGirl.png)
+
+**Gloopie Primo**
+
+![Gloopie Primo](docs/img/gallery/SK_OctopusGirl_Neutral.png)
+
+**Icelyn**
+
+![Icelyn](docs/img/gallery/SK_IceWitch.png)
+
+**Katress**
+
+![Katress](docs/img/gallery/SK_CatMage.png)
+
+**Katress Ignis**
+
+![Katress Ignis](docs/img/gallery/SK_CatMage_Fire.png)
+
+**Lapure**
+
+![Lapure](docs/img/gallery/SK_SleeveRabbit.png)
+
+**Lovander**
+
+![Lovander](docs/img/gallery/SK_PinkLizard.png)
+
+**Lullu**
+
+![Lullu](docs/img/gallery/SK_LeafPrincess.png)
+
+**Lunaris**
+
+![Lunaris](docs/img/gallery/SK_Mutant.png)
+
+**Lyleen**
+
+![Lyleen](docs/img/gallery/SK_LilyQueen.png)
+
+**Lyleen (Ice)**
+
+![Lyleen Ice](docs/img/gallery/SK_LilyQueen_Ice.png)
+
+**Nitemary**
+
+![Nitemary](docs/img/gallery/SK_GhostRabbit.png)
+
+**Nitemary Botan**
+
+![Nitemary Botan](docs/img/gallery/SK_GhostRabbit_Grass.png)
+
+**Nyafia**
+
+![Nyafia](docs/img/gallery/SK_BadCatgirl.png)
+
+**Petallia**
+
+![Petallia](docs/img/gallery/SK_FlowerDoll.png)
+
+**Petallia Ignis**
+
+![Petallia Ignis](docs/img/gallery/SK_FlowerDoll_Fire.png)
+
+**Prunelia**
+
+![Prunelia](docs/img/gallery/SK_BlueberryFairy.png)
+
+**Sekhmet**
+
+![Sekhmet](docs/img/gallery/SK_Sekhmet.png)
+
+**Selyne**
+
+![Selyne](docs/img/gallery/SK_MoonQueen.png)
+
+**Splatterina**
+
+![Splatterina](docs/img/gallery/SK_GrimGirl.png)
+
+</details>
 
 ## Selbst bauen (Pipeline)
 
