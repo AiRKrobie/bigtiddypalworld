@@ -1,37 +1,35 @@
-"""Vergroessert die Brustregion eines aus FModel/CUE4Parse exportierten
-Skeletal Mesh (glTF). Bone-verankerte Heuristik, funktioniert ohne
-dedizierte Brust-Bones.
+"""Vergroessert die Brustregion eines Pal-Skeletal-Mesh (ActorX .psk).
+
+Pipeline: CUE4Parse exportiert .psk (UE-Koordinaten, cm, keine Spiegelung),
+dieses Skript morpht und exportiert FBX fuer den UE-Reimport.
 
 Aufruf (Headless):
     blender --background --python scripts/bust_morph.py -- \
-        --input export/.../SK_X.glb --output work/X_morphed.fbx \
-        --factor 1.6 --render work/X
+        --input export/.../SK_X.psk --output work/X_morphed.fbx \
+        --factor 2.5 --render work/X
 
-Vorgehen:
-  1. glTF importieren (Mesh + Skelett + Weights bleiben erhalten)
-  2. Brustregion ueber Bones eingrenzen:
-     - Hoehenband: spine_02.z .. clavicle.z (+ etwas Luft)
-     - nur Vertices mit Gewicht auf spine_02/spine_03/clavicle
-     - nur Koerper-Vorderseite (Front-Achse automatisch ueber Kiefer-Bones,
-       sonst --front-axis)
-  3. Pro Seite (links/rechts) ein Falloff-Zentrum aus der Selektion schaetzen,
-     Vertices entlang ihrer Normalen mit weichem Falloff verschieben.
-     Vertex-Anzahl, Reihenfolge und Weights bleiben unveraendert.
-  4. Optional: Vorher/Nachher-Renderings (Front + Seite) als PNG
-  5. Export als FBX fuer den UE-Import
+Formmodell: zwei getrennte Lobes (links/rechts symmetrisch) mit
+Dekolleté-Daempfung an der Mittellinie, radiale Verschiebung von
+innenliegenden, leicht abgesenkten Zentren plus Vorwaerts-Projektion.
+Region wird bone-verankert bestimmt (spine_02..clavicle, Weights),
+Front-Achse automatisch ueber Kiefer-Bones erkannt.
 """
 
 import argparse
 import math
+import os
 import sys
 
 import bpy
 from mathutils import Vector
 
+PSK_ADDON_ZIP = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                             "tools", "io_scene_psk_psa.zip")
+
 # Bones, die das Hoehenband definieren
 BAND_LOWER_BONES = ("spine_02", "spine02")
 BAND_UPPER_BONES = ("clavicle_l", "clavicle_r", "neck")
-# Bones, auf die betroffene Vertices gewichtet sein muessen
+# Bones, auf die Anker-Vertices gewichtet sein muessen
 CHEST_WEIGHT_BONES = ("spine_02", "spine02", "spine_03", "spine03",
                       "chest", "breast", "bust", "clavicle_l", "clavicle_r")
 MIN_WEIGHT = 0.10
@@ -46,29 +44,56 @@ EXCLUDE_WEIGHT = 0.30
 def parse_args():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     p = argparse.ArgumentParser()
-    p.add_argument("--input", required=True, help="glTF/GLB")
+    p.add_argument("--input", required=True, help=".psk aus CUE4Parse")
     p.add_argument("--output", required=True, help="Ziel-FBX")
     p.add_argument("--factor", type=float, default=1.5,
-                   help="Staerke: 1.0 = unveraendert, 1.5 = deutlich, 2.0 = extrem")
+                   help="Staerke: 1.0 = unveraendert, 1.5 = deutlich, 2.0+ = extrem")
     p.add_argument("--cleavage", type=float, default=0.65,
                    help="Trennung der Lobes an der Mittellinie (0=keine, 1=maximal)")
     p.add_argument("--render", default=None,
-                   help="Praefix fuer Vorher/Nachher-PNGs (z. B. work/PinkLizard)")
-    p.add_argument("--front-axis", choices=["auto", "-y", "+y"], default="auto")
-    p.add_argument("--no-export", action="store_true",
-                   help="Nur rendern/analysieren, kein FBX schreiben")
+                   help="Praefix fuer Vorher/Nachher-PNGs")
+    p.add_argument("--no-export", action="store_true")
+    p.add_argument("--bone-axis-primary", default="Y")
+    p.add_argument("--bone-axis-secondary", default="X")
     return p.parse_args(argv)
 
 
-def import_scene(path):
-    bpy.ops.wm.read_factory_settings(use_empty=True)
-    bpy.ops.import_scene.gltf(filepath=path)
+def ensure_psk_addon():
+    """Aktiviert die vorinstallierte psk-Extension (siehe tools/, per
+    `blender --command extension install-file` eingerichtet)."""
+    import addon_utils
+    for name in ("bl_ext.user_default.io_scene_psk_psa",):
+        try:
+            addon_utils.enable(name, default_set=False)
+            return
+        except Exception as ex:
+            print(f"Enable {name} fehlgeschlagen: {ex}")
+    for mod in addon_utils.modules(refresh=True):
+        if "psk" in mod.__name__.lower():
+            addon_utils.enable(mod.__name__, default_set=False)
+            return
+    raise RuntimeError("psk-Addon konnte nicht aktiviert werden")
+
+
+def import_psk(path):
+    ensure_psk_addon()
+    for op_path in ("psk.import_file", "import_scene.psk"):
+        ns, name = op_path.split(".")
+        group = getattr(bpy.ops, ns, None)
+        op = getattr(group, name, None) if group else None
+        if op is not None:
+            try:
+                op(filepath=path)
+                break
+            except AttributeError:
+                continue
+    else:
+        raise RuntimeError("Kein psk-Import-Operator gefunden")
     meshes = [o for o in bpy.context.scene.objects if o.type == "MESH"]
     arms = [o for o in bpy.context.scene.objects if o.type == "ARMATURE"]
-    if not meshes:
-        raise RuntimeError("Kein Mesh im Import")
-    body = max(meshes, key=lambda o: len(o.data.vertices))
-    return body, (arms[0] if arms else None)
+    if not meshes or not arms:
+        raise RuntimeError("psk-Import lieferte kein Mesh/Skelett")
+    return max(meshes, key=lambda o: len(o.data.vertices)), arms[0]
 
 
 def find_bone(armature, names):
@@ -80,38 +105,44 @@ def find_bone(armature, names):
 
 
 def detect_front(armature):
-    """Front-Achse ueber Kiefer/Kopf-Bones: Kiefer liegt vor dem Kopf."""
+    """Front-Vektor ueber Kiefer/Kopf-Bones (Kiefer liegt vor dem Kopf).
+
+    Gibt einen Einheitsvektor in der XY-Ebene zurueck (+/-X oder +/-Y).
+    """
     head = find_bone(armature, ("head",))
     jaw = find_bone(armature, ("jaw_02", "jaw_01", "jaw"))
     if head and jaw:
-        d = jaw.head_local.y - head.head_local.y
-        if abs(d) > 1e-4:
-            return -1 if d < 0 else 1
-    return -1  # UE-Standard nach glTF-Import
+        d = jaw.head_local - head.head_local
+        d.z = 0.0
+        if d.length > 1e-4:
+            if abs(d.x) >= abs(d.y):
+                return Vector((math.copysign(1.0, d.x), 0.0, 0.0))
+            return Vector((0.0, math.copysign(1.0, d.y), 0.0))
+    return Vector((0.0, -1.0, 0.0))
 
 
 def main():
     args = parse_args()
-    body, armature = import_scene(args.input)
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    body, armature = import_psk(args.input)
     mesh = body.data
-    if armature is None:
-        raise RuntimeError("Kein Skelett im Import -- falsches Asset?")
 
-    front = detect_front(armature) if args.front_axis == "auto" \
-        else (-1 if args.front_axis == "-y" else 1)
+    front = detect_front(armature)
+    side = front.cross(Vector((0.0, 0.0, 1.0)))
+    print(f"Front={tuple(front)}  Seite={tuple(side)}")
 
     zs = [v.co.z for v in mesh.vertices]
     height = max(zs) - min(zs)
+    print(f"Mesh-Hoehe: {height:.1f} Einheiten, {len(mesh.vertices)} Vertices")
 
     lower = find_bone(armature, BAND_LOWER_BONES)
     upper = find_bone(armature, BAND_UPPER_BONES)
     if lower is None or upper is None:
-        raise RuntimeError(
-            "Anker-Bones fehlen. Vorhanden: "
-            + ", ".join(b.name for b in armature.data.bones))
+        raise RuntimeError("Anker-Bones fehlen. Vorhanden: "
+                           + ", ".join(b.name for b in armature.data.bones))
     band_lo = lower.head_local.z - 0.02 * height
     band_hi = upper.head_local.z + 0.02 * height
-    print(f"Front={'-Y' if front < 0 else '+Y'}  Band z=[{band_lo:.3f}, {band_hi:.3f}]")
+    print(f"Band z=[{band_lo:.2f}, {band_hi:.2f}]")
 
     group_ids = {g.index for g in body.vertex_groups
                  if g.name.lower() in CHEST_WEIGHT_BONES}
@@ -123,10 +154,9 @@ def main():
     def weight_on(v, ids):
         return sum(g.weight for g in v.groups if g.group in ids)
 
-    # Anker: reine Koerper-Brust-Vertices (ohne Fell) -> definieren Zentren
     anchors = [v for v in mesh.vertices
                if band_lo <= v.co.z <= band_hi
-               and (v.co.y * front) > 0
+               and v.co.dot(front) > 0
                and weight_on(v, exclude_ids) < EXCLUDE_WEIGHT
                and weight_on(v, companion_ids) < 0.5
                and any(g.group in group_ids and g.weight >= MIN_WEIGHT
@@ -135,84 +165,80 @@ def main():
         raise RuntimeError(f"Anker-Selektion zu klein ({len(anchors)} Vertices)")
     print(f"Anker: {len(anchors)} von {len(mesh.vertices)} Vertices")
 
-    # Falloff-Zentren pro Seite: Centroid, nach vorn auf den Apex geschoben,
-    # anschliessend links/rechts symmetrisiert
-    raw_centers = []
-    for side_sign in (-1, 1):
-        side = [v for v in anchors if (v.co.x or 1e-9) * side_sign > 0]
-        if not side:
+    # Zentren pro Seite: Centroid, auf den Front-Apex geschoben, symmetrisiert
+    raw = []
+    for sgn in (-1, 1):
+        pts = [v.co for v in anchors if (v.co.dot(side) or 1e-9) * sgn > 0]
+        if not pts:
             continue
-        centroid = sum((v.co for v in side), Vector()) / len(side)
-        apex_y = max(v.co.y * front for v in side) * front
-        raw_centers.append(Vector((centroid.x, apex_y, centroid.z)))
-    if not raw_centers:
+        centroid = sum(pts, Vector()) / len(pts)
+        apex = max(p.dot(front) for p in pts)
+        raw.append(centroid + front * (apex - centroid.dot(front)))
+    if not raw:
         raise RuntimeError("Keine Falloff-Zentren bestimmbar")
-    if len(raw_centers) == 2:
-        cx = sum(abs(c.x) for c in raw_centers) / 2
-        cy = sum(c.y for c in raw_centers) / 2
-        cz = sum(c.z for c in raw_centers) / 2
-        centers = [Vector((-cx, cy, cz)), Vector((cx, cy, cz))]
+    if len(raw) == 2:
+        cs = sum(abs(c.dot(side)) for c in raw) / 2
+        base = sum(raw, Vector()) / 2
+        base -= side * base.dot(side)
+        centers = [base - side * cs, base + side * cs]
     else:
-        centers = raw_centers
-        cx = abs(centers[0].x)
+        centers = raw
+        cs = abs(centers[0].dot(side))
 
     radius = max(max((v.co - c).length for c in centers) for v in anchors) * 0.75
     strength = (args.factor - 1.0) * 0.5 * radius
 
-    # Verschoben wird alles im Brust-Einzugsgebiet: Anker + Begleiter (Fell)
-    # + raeumlich nahe Vertices, ausser explizit ausgeschlossene.
     reach = radius * 1.25
     candidates = [v for v in mesh.vertices
-                  if (v.co.y * front) > -0.05 * height
+                  if v.co.dot(front) > -0.05 * height
                   and weight_on(v, exclude_ids) < EXCLUDE_WEIGHT
                   and min((v.co - c).length for c in centers) <= reach]
-    print(f"Zentren={[tuple(round(x, 3) for x in c) for c in centers]}  "
-          f"Radius={radius:.3f}  Verschiebung max={strength:.3f}  "
+    print(f"Zentren={[tuple(round(x, 1) for x in c) for c in centers]}  "
+          f"Radius={radius:.1f}  Verschiebung max={strength:.1f}  "
           f"Verschoben werden {len(candidates)} Vertices")
 
     chest_focus = (sum(centers, Vector()) / len(centers), radius * 3.5)
-
     if args.render:
-        render_views(body, front, args.render + "_before", chest_focus)
+        render_views(body, front, side, args.render + "_before", chest_focus)
 
-    # Formmodell: zwei getrennte Lobes statt einer Gesamtwoelbung.
-    # - Jede Seite wird NUR von ihrem eigenen Zentrum verformt
-    # - Dekolleté: Daempfung nahe der Mittellinie trennt die Lobes sichtbar
-    # - Richtung: radial vom innenliegenden, leicht abgesenkten Zentrum
-    #   (Teardrop), gemischt mit Vorwaerts-Projektion statt purer Skalierung
-    inner = [c + Vector((0, -front * radius * 0.6, -radius * 0.18))
+    inner = [c - front * (radius * 0.6) + Vector((0, 0, -radius * 0.18))
              for c in centers]
-    forward = Vector((0, front, 0))
-    cleave_w = max(cx * 0.9, 1e-6)
+    cleave_w = max(cs * 0.9, 1e-6)
     for v in candidates:
-        if len(centers) == 2:
-            i = 0 if v.co.x < 0 else 1
-        else:
-            i = 0
+        i = 0 if (len(centers) == 2 and v.co.dot(side) < 0) else len(centers) - 1
         d = (v.co - centers[i]).length
         fall = max(0.0, 1.0 - (d / radius) ** 2)
         fall = math.sin(fall * math.pi / 2)
         if fall <= 0.0:
             continue
-        # Mittellinien-Daempfung (smoothstep ueber |x|)
-        sep = min(1.0, abs(v.co.x) / cleave_w)
+        sep = min(1.0, abs(v.co.dot(side)) / cleave_w)
         sep = sep * sep * (3 - 2 * sep)
         fall *= args.cleavage * sep + (1.0 - args.cleavage)
         direction = v.co - inner[i]
         if direction.length < 1e-6:
             continue
-        direction = (direction.normalized() * 0.7 + forward * 0.3).normalized()
+        direction = (direction.normalized() * 0.7 + front * 0.3).normalized()
         v.co += direction * (strength * fall)
     mesh.update()
 
     if args.render:
-        render_views(body, front, args.render + "_after", chest_focus)
+        render_views(body, front, side, args.render + "_after", chest_focus)
 
     if not args.no_export:
-        # Armature-Objekt MUSS "Armature" heissen: nur dann laesst der
-        # UE-FBX-Import den Objekt-Knoten weg. Sonst entsteht ein zusaetzlicher
-        # Root-Bone und die Spiel-Animationen greifen nicht mehr (T-Pose).
+        # "Armature" als Objektname: UE laesst den Knoten dann beim Import weg
         armature.name = "Armature"
+        # Socket-Bones (Anbaupunkte) verwerfen, falls im psk enthalten --
+        # sie gehoeren nicht ins Referenz-Skelett des Meshes
+        bpy.context.view_layer.objects.active = armature
+        bpy.ops.object.mode_set(mode="EDIT")
+        for eb in [b for b in armature.data.edit_bones
+                   if b.name.lower().startswith("socket_")]:
+            print(f"Entferne Socket-Bone: {eb.name}")
+            armature.data.edit_bones.remove(eb)
+        bpy.ops.object.mode_set(mode="OBJECT")
+        # psk-Daten sind cm-Zahlen: Szene als cm deklarieren, damit der
+        # FBX-Export keine Einheiten-Umrechnung draufmultipliziert
+        bpy.context.scene.unit_settings.scale_length = 0.01
         bpy.ops.object.select_all(action="SELECT")
         bpy.ops.export_scene.fbx(
             filepath=args.output,
@@ -221,12 +247,14 @@ def main():
             mesh_smooth_type="FACE",
             use_armature_deform_only=True,
             bake_anim=False,
+            apply_unit_scale=True,
+            primary_bone_axis=args.bone_axis_primary,
+            secondary_bone_axis=args.bone_axis_secondary,
         )
         print(f"Exportiert: {args.output}")
 
 
-def render_views(body, front, prefix, focus=None):
-    """Orthografische Front-/Seitenansicht plus Brust-Nahaufnahme als PNG."""
+def render_views(body, front, side, prefix, focus=None):
     scene = bpy.context.scene
     scene.render.engine = "BLENDER_WORKBENCH"
     scene.render.resolution_x = 720
@@ -239,7 +267,6 @@ def render_views(body, front, prefix, focus=None):
 
     cam_data = bpy.data.cameras.get("preview_cam") or bpy.data.cameras.new("preview_cam")
     cam_data.type = "ORTHO"
-    cam_data.ortho_scale = size
     cam = bpy.data.objects.get("preview_cam_obj")
     if cam is None:
         cam = bpy.data.objects.new("preview_cam_obj", cam_data)
@@ -247,13 +274,13 @@ def render_views(body, front, prefix, focus=None):
     scene.camera = cam
 
     views = [
-        ("front", Vector((0, front * size * 3, center.z)), center, size),
-        ("side", Vector((size * 3, 0, center.z)), center, size),
+        ("front", center + front * size * 3, center, size),
+        ("side", center + side * size * 3, center, size),
     ]
     if focus is not None:
         f_center, f_size = focus
-        views.append(("zoom_side", Vector((size * 3, 0, f_center.z)), f_center, f_size))
-        views.append(("zoom_front", Vector((0, front * size * 3, f_center.z)), f_center, f_size))
+        views.append(("zoom_front", f_center + front * size * 3, f_center, f_size))
+        views.append(("zoom_side", f_center + side * size * 3, f_center, f_size))
 
     for name, loc, target, scale in views:
         cam_data.ortho_scale = scale

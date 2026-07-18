@@ -28,8 +28,6 @@ using CUE4Parse_Conversion.Meshes;
 var args_ = ParseArgs(args);
 string paksDir = args_["paks"];
 string usmapPath = args_["usmap"];
-string targetsFile = args_["targets"];
-string outDir = args_["out"];
 
 // --- 1. Mounten ---
 var provider = new DefaultFileProvider(
@@ -39,6 +37,62 @@ provider.MappingsContainer = new FileUsmapTypeMappingsProvider(usmapPath);
 provider.Initialize();
 provider.SubmitKey(new FGuid(), new FAesKey("0x0000000000000000000000000000000000000000000000000000000000000000"));
 Console.WriteLine($"Gemountet: {provider.Files.Count} Dateien");
+
+// --- Verify-Modus: Skelett eines Mod-Paks gegen das Original vergleichen ---
+if (args_.TryGetValue("verify-pak", out var verifyPakDir))
+{
+    string meshAsset = args_["mesh"]; // z. B. Pal/Content/Pal/.../SK_PinkLizard
+    var modProvider = new DefaultFileProvider(
+        verifyPakDir, SearchOption.TopDirectoryOnly,
+        new VersionContainer(EGame.GAME_UE5_1));
+    modProvider.MappingsContainer = new FileUsmapTypeMappingsProvider(usmapPath);
+    modProvider.Initialize();
+    modProvider.SubmitKey(new FGuid(), new FAesKey("0x0000000000000000000000000000000000000000000000000000000000000000"));
+    Console.WriteLine($"Mod-Pak gemountet: {modProvider.Files.Count} Dateien");
+
+    var orig = (USkeletalMesh)provider.LoadPackageObject(meshAsset);
+    var mod = (USkeletalMesh)modProvider.LoadPackageObject(meshAsset);
+
+    var ob = orig.ReferenceSkeleton.FinalRefBoneInfo;
+    var mb = mod.ReferenceSkeleton.FinalRefBoneInfo;
+    var op = orig.ReferenceSkeleton.FinalRefBonePose;
+    var mp = mod.ReferenceSkeleton.FinalRefBonePose;
+    Console.WriteLine($"Bones Original={ob.Length}  Mod={mb.Length}");
+
+    for (int i = 0; i < Math.Min(6, Math.Min(ob.Length, mb.Length)); i++)
+    {
+        Console.WriteLine($"--- [{i}] {ob[i].Name.Text}");
+        Console.WriteLine($"  orig T=({op[i].Translation.X:F2},{op[i].Translation.Y:F2},{op[i].Translation.Z:F2}) " +
+                          $"Q=({op[i].Rotation.X:F4},{op[i].Rotation.Y:F4},{op[i].Rotation.Z:F4},{op[i].Rotation.W:F4}) " +
+                          $"S=({op[i].Scale3D.X:F2},{op[i].Scale3D.Y:F2},{op[i].Scale3D.Z:F2})");
+        Console.WriteLine($"  mod  T=({mp[i].Translation.X:F2},{mp[i].Translation.Y:F2},{mp[i].Translation.Z:F2}) " +
+                          $"Q=({mp[i].Rotation.X:F4},{mp[i].Rotation.Y:F4},{mp[i].Rotation.Z:F4},{mp[i].Rotation.W:F4}) " +
+                          $"S=({mp[i].Scale3D.X:F2},{mp[i].Scale3D.Y:F2},{mp[i].Scale3D.Z:F2})");
+    }
+
+    int n = Math.Max(ob.Length, mb.Length);
+    for (int i = 0; i < n; i++)
+    {
+        string o = i < ob.Length ? $"{ob[i].Name.Text}(p{ob[i].ParentIndex})" : "-";
+        string m = i < mb.Length ? $"{mb[i].Name.Text}(p{mb[i].ParentIndex})" : "-";
+        bool nameDiff = o != m;
+        bool poseDiff = false;
+        if (i < ob.Length && i < mb.Length)
+        {
+            var dt = (op[i].Translation - mp[i].Translation).Size();
+            var dq = Math.Abs(op[i].Rotation.W) - Math.Abs(mp[i].Rotation.W);
+            poseDiff = dt > 0.1f || Math.Abs(dq) > 0.001f;
+            if (nameDiff || poseDiff)
+                Console.WriteLine($"[{i,3}] {o,-30} {m,-30} dT={dt:F3} dQw={dq:F4}");
+        }
+        else Console.WriteLine($"[{i,3}] {o,-30} {m,-30} FEHLT");
+    }
+    Console.WriteLine("Vergleich abgeschlossen.");
+    return;
+}
+
+string targetsFile = args_["targets"];
+string outDir = args_["out"];
 
 // --- 2. Namenszuordnung aus den Spieldaten ---
 // DT_PalNameText: Zeilen "PAL_NAME_<Codename>" -> lokalisierter Anzeigename
@@ -100,7 +154,12 @@ if (missing.Count > 0)
 var manifest = new List<object>();
 var options = new ExporterOptions
 {
-    MeshFormat = EMeshFormat.Gltf2,
+    // ActorX/psk statt glTF: bleibt in UE-Koordinaten (linkshaendig, cm),
+    // dadurch keine Spiegelungs-/Einheiten-Konvertierung im Roundtrip
+    MeshFormat = EMeshFormat.ActorX,
+    // Sockets nicht als Bones exportieren -- sie wuerden die
+    // Skelett-Hierarchie gegenueber dem Original verschieben
+    SocketFormat = ESocketFormat.None,
     ExportMorphTargets = true,
     ExportMaterials = false,
 };
@@ -169,7 +228,7 @@ static Dictionary<string, string> ParseArgs(string[] args)
     var d = new Dictionary<string, string>();
     for (int i = 0; i < args.Length - 1; i++)
         if (args[i].StartsWith("--")) d[args[i][2..]] = args[++i];
-    foreach (var req in new[] { "paks", "usmap", "targets", "out" })
+    foreach (var req in new[] { "paks", "usmap" })
         if (!d.ContainsKey(req)) throw new ArgumentException($"--{req} fehlt");
     return d;
 }

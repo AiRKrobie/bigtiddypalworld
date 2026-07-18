@@ -62,6 +62,8 @@ def import_fbx(fbx, dest_path, dest_name):
     sk_data.set_editor_property("preserve_smoothing_groups", True)
     sk_data.set_editor_property("import_morph_targets", True)
     sk_data.set_editor_property("convert_scene", True)
+    # Einheiten werden Blender-seitig auf cm gebracht; UE liest Werte roh
+    sk_data.set_editor_property("convert_scene_unit", False)
 
     task = unreal.AssetImportTask()
     task.filename = fbx
