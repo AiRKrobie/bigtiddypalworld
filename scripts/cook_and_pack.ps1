@@ -46,8 +46,9 @@ $ResponseFile = "$BuildDir\filelist.txt"
 $ExcludeMeshes = @("SK_JellyfishFairy")
 $lines = Get-ChildItem $CookedDir -Recurse -File |
     Where-Object { $_.Extension -in ".uasset", ".uexp", ".ubulk" } |
-    Where-Object { $_.BaseName -like "SK_*" -and $_.BaseName -notlike "*_Skeleton" -and
-                   $_.BaseName -notlike "MI_*" -and $_.BaseName -notlike "PA_*" -and
+    Where-Object { (($_.BaseName -like "SK_*" -and $_.BaseName -notlike "*_Skeleton" -and
+                     $_.BaseName -notlike "MI_*" -and $_.BaseName -notlike "PA_*") -or
+                    $_.BaseName -eq "M_BustBikini") -and
                    $ExcludeMeshes -notcontains $_.BaseName } |
     ForEach-Object {
         $rel = $_.FullName.Substring((Resolve-Path $CookedDir).Path.Length).TrimStart("\")

@@ -101,6 +101,37 @@ def relocate_skeleton(sk, target_path):
     return unreal.load_asset(target_path)
 
 
+BIKINI_MAT = "/Game/Pal/Mod/M_BustBikini"
+
+
+def ensure_bikini_material():
+    """Pinkes Bikini-Material (wird mit ins Pak gepackt)."""
+    if EAL.does_asset_exist(BIKINI_MAT):
+        return unreal.load_asset(BIKINI_MAT)
+    pkg, name = BIKINI_MAT.rsplit("/", 1)
+    mat = ASSET_TOOLS.create_asset(name, pkg, unreal.Material,
+                                   unreal.MaterialFactoryNew())
+    try:
+        MEL = unreal.MaterialEditingLibrary
+        col = MEL.create_material_expression(
+            mat, unreal.MaterialExpressionConstant3Vector, -400, 0)
+        col.set_editor_property("constant",
+                                unreal.LinearColor(0.95, 0.06, 0.38, 1.0))
+        MEL.connect_material_property(col, "",
+                                      unreal.MaterialProperty.MP_BASE_COLOR)
+        rough = MEL.create_material_expression(
+            mat, unreal.MaterialExpressionConstant, -400, 200)
+        rough.set_editor_property("r", 0.5)
+        MEL.connect_material_property(rough, "",
+                                      unreal.MaterialProperty.MP_ROUGHNESS)
+        MEL.recompile_material(mat)
+    except Exception as ex:
+        log(f"WARNUNG: Bikini-Material-Nodes fehlgeschlagen: {ex}")
+    EAL.save_asset(BIKINI_MAT)
+    log(f"Bikini-Material erstellt: {BIKINI_MAT}")
+    return mat
+
+
 def assign_materials(sk, wanted):
     """Setzt Material-Slots per Slot-Name auf Platzhalter an Original-Pfaden."""
     by_slot = {m["slot"]: m["path"] for m in wanted}
@@ -110,7 +141,9 @@ def assign_materials(sk, wanted):
         slot = str(m.get_editor_property("material_slot_name"))
         entry = unreal.SkeletalMaterial()
         entry.set_editor_property("material_slot_name", m.get_editor_property("material_slot_name"))
-        if slot in by_slot:
+        if slot.lower().startswith("bikini"):
+            entry.set_editor_property("material_interface", ensure_bikini_material())
+        elif slot in by_slot:
             entry.set_editor_property("material_interface",
                                       ensure_placeholder_material(by_slot[slot]))
         else:

@@ -61,6 +61,8 @@ def parse_args():
     p.add_argument("--mode", choices=["generate", "dome"], default="generate",
                    help="generate=eigene Brust-Geometrie erzeugen (Standard), "
                         "dome=vorhandene Flaeche verformen (Legacy)")
+    p.add_argument("--bikini", action="store_true",
+                   help="Bikini-Top als Geometrie ueber den Bruesten erzeugen")
     p.add_argument("--jiggle", action="store_true",
                    help="Jiggle-Bones (breast_l/r) hinzufuegen und die "
                         "Geometrie daran binden (fuer Physik im Spiel)")
@@ -213,7 +215,8 @@ def subdivide_region(mesh, cand_idx, cuts):
 
 
 def generate_breasts(body, mesh, centers, front, side, R_lobe, H,
-                     candidates, weight_on, companion_ids, height):
+                     candidates, weight_on, companion_ids, height,
+                     make_bikini=False):
     """Erzeugt eigenstaendige Brust-Geometrie (glatte Teardrop-Halbkugeln,
     18x12-Kugelaufloesung) und integriert sie ins Mesh:
     - Position/Groesse aus der Bone-verankerten Analyse
@@ -300,11 +303,12 @@ def generate_breasts(body, mesh, centers, front, side, R_lobe, H,
 
         for v in verts:
             x, y, z = v.co.x, v.co.y, v.co.z
-            # Fast kugelrund; nur minimal voller unten fuer natuerlichen Fall
-            fullness = 1.0 + 0.08 * max(0.0, -y)
+            # Weiche Tropfenform: voller unten, oben leicht verjuengt,
+            # dezenter natuerlicher Fall (Anime-Brust statt harter Kugel)
+            fullness = 1.0 + 0.20 * max(0.0, -y) - 0.06 * max(0.0, y)
+            droop = -0.05 * (1.0 - z)   # Front sackt minimal ab
             sphere_co = (base + xax * (x * Rb * fullness)
-                         + yax * (y * Rb * fullness) + zax * (z * depth))
-            # Rand weich in die Koerperoberflaeche blenden (integrierte Woelbung)
+                         + yax * (y * Rb * fullness + droop * Rb) + zax * (z * depth))
             blend = max(0.0, min(1.0, (z + 0.35) / 0.85))
             blend = blend * blend * (3 - 2 * blend)
             _, k, _ = tree.find(sphere_co)
@@ -320,7 +324,17 @@ def generate_breasts(body, mesh, centers, front, side, R_lobe, H,
             "root": base,
             "side": (sgn if sgn != 0 else 1),
             "v_start": v_start,
+            "base": base.copy(), "xax": xax.copy(), "yax": yax.copy(),
+            "zax": zax.copy(), "Rb": Rb, "depth": depth,
         })
+
+    bikini_idx = None
+    if make_bikini:
+        bikini_mat = bpy.data.materials.new("Bikini")
+        bikini_mat.diffuse_color = (0.95, 0.10, 0.45, 1.0)  # pink (Workbench)
+        mesh.materials.append(bikini_mat)
+        bikini_idx = len(mesh.materials) - 1
+        generate_bikini(bm, breast_info, bikini_idx, up, side, front)
 
     bm.to_mesh(mesh)
     bm.free()
@@ -365,6 +379,73 @@ def generate_breasts(body, mesh, centers, front, side, R_lobe, H,
     print(f"Generiert: 2x Teardrop-Halbkugel, {len(full_pos)} neue Vertices, "
           f"Material-Slot {mat_index}")
     return full_pos, breast_info
+
+
+def _make_strap(bm, p0, p1, r, mat_idx, seg=8):
+    """Duennes Band (Roehre) zwischen zwei Punkten -- Bikini-Schnuere."""
+    d = p1 - p0
+    L = d.length
+    if L < 1e-5:
+        return
+    ax = d / L
+    tmp = Vector((0, 0, 1)) if abs(ax.z) < 0.9 else Vector((1, 0, 0))
+    u = ax.cross(tmp).normalized()
+    w = ax.cross(u).normalized()
+    ring0, ring1 = [], []
+    for i in range(seg):
+        a = 2 * math.pi * i / seg
+        off = u * (math.cos(a) * r) + w * (math.sin(a) * r)
+        ring0.append(bm.verts.new(p0 + off))
+        ring1.append(bm.verts.new(p1 + off))
+    for i in range(seg):
+        j = (i + 1) % seg
+        f = bm.faces.new((ring0[i], ring0[j], ring1[j], ring1[i]))
+        f.material_index = mat_idx
+        f.smooth = True
+
+
+def generate_bikini(bm, breast_info, mat_idx, up, side, front):
+    """Erzeugt einen String-Bikini-Top ueber den Bruesten: Dreieck-Cups plus
+    Halter- (Nacken) und Seitenbaender. Eigenes Material (mat_idx)."""
+    Rb_max = max(bi["Rb"] for bi in breast_info)
+    center = sum((bi["base"] for bi in breast_info), Vector()) / len(breast_info)
+    neck = center + up * (Rb_max * 2.3) + front * (Rb_max * 0.1)
+    for bi in breast_info:
+        base, xax, yax, zax = bi["base"], bi["xax"], bi["yax"], bi["zax"]
+        Rb, depth, sgn = bi["Rb"], bi["depth"], bi["side"]
+
+        ret = bmesh.ops.create_uvsphere(bm, u_segments=20, v_segments=14,
+                                        radius=1.0)
+        cverts = list(ret["verts"])
+        keep = []
+        for v in cverts:
+            x, y, z = v.co.x, v.co.y, v.co.z
+            xo = x * sgn                       # >0 = aussen, <0 = innen
+            # Cup deckt fast die ganze Front; nur obere Aussenecke diagonal weg
+            cut = (y - 0.55) + max(0.0, xo) * 0.75
+            keep.append(z > -0.12 and y > -0.92 and cut <= 0.0)
+        bmesh.ops.delete(bm, geom=[v for v, k in zip(cverts, keep) if not k],
+                         context="VERTS")
+        cverts = [v for v in cverts if v.is_valid]
+        fabric = Rb * 0.06
+        for v in cverts:
+            x, y, z = v.co.x, v.co.y, v.co.z
+            fn = 1.0 + 0.20 * max(0.0, -y) - 0.06 * max(0.0, y)
+            p = (base + xax * (x * Rb * fn * 1.04)
+                 + yax * (y * Rb * fn * 1.04) + zax * (z * depth * 1.04))
+            n = (p - base).normalized()
+            v.co = p + n * fabric
+        for f in {f for v in cverts for f in v.link_faces}:
+            f.material_index = mat_idx
+            f.smooth = True
+
+        # Halterband: Cup-Oberkante (innen) hoch zum Nacken
+        top_in = base + xax * (-sgn * 0.30 * Rb) + yax * (0.55 * Rb) + zax * (0.55 * depth)
+        _make_strap(bm, top_in, neck, Rb * 0.05, mat_idx)
+        # Seitenband: Cup-Aussenkante um die Seite nach hinten
+        outer = base + xax * (sgn * 0.85 * Rb) + yax * (0.10 * Rb) + zax * (0.30 * depth)
+        back = outer - front * (Rb * 2.0) + side * (sgn * Rb * 0.1)
+        _make_strap(bm, outer, back, Rb * 0.05, mat_idx)
 
 
 def add_breast_bones(body, mesh, armature, breast_info, height):
@@ -443,7 +524,7 @@ def main():
         displaced, breast_info = generate_breasts(
             body, mesh, centers, front, side, R_lobe, H,
             info["candidates"], info["weight_on"], info["companion_ids"],
-            height)
+            height, make_bikini=args.bikini)
         bones = []
         if args.jiggle:
             bones = add_breast_bones(body, mesh, armature, breast_info, height)
@@ -590,6 +671,11 @@ def render_views(body, front, side, prefix, focus=None):
     scene.render.resolution_x = 720
     scene.render.resolution_y = 1080
     scene.render.image_settings.file_format = "PNG"
+    # Material-Farben zeigen (damit der Bikini sichtbar wird)
+    try:
+        scene.display.shading.color_type = "MATERIAL"
+    except Exception:
+        pass
 
     center = sum((body.matrix_world @ Vector(c) for c in body.bound_box),
                  Vector()) / 8
