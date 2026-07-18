@@ -279,28 +279,34 @@ def generate_breasts(body, mesh, centers, front, side, R_lobe, H,
             if lat < R_lobe * 0.8:
                 proj_max = max(proj_max, p)
 
-        Rb = R_lobe * 0.92          # groesser/voller
-        sink = Rb * 0.42
-        depth = (H + sink) * 1.35   # staerkere Vorwaerts-Projektion
-        # Ansatz hoeher auf der Brust
-        base = c + zax * (proj_max - sink) + up * (Rb * 0.18)
+        Rb = R_lobe * 0.90
+        sink = Rb * 0.55            # Ruecken tiefer im Koerper -> kein Ball-Rand
+        depth = (H + sink) * 1.25
+        # Deutlich hoeher ansetzen (auf die Brust, nicht den Bauch)
+        base = c + zax * (proj_max - sink) + up * (Rb * 0.55)
         v_start = len(bm.verts)
 
         ret = bmesh.ops.create_uvsphere(bm, u_segments=20, v_segments=14,
                                         radius=1.0)
         verts = list(ret["verts"])
-        to_del = [v for v in verts if v.co.z < -0.22]
+        to_del = [v for v in verts if v.co.z < -0.30]
         bmesh.ops.delete(bm, geom=to_del, context="VERTS")
         verts = [v for v in verts if v.is_valid]
 
         for v in verts:
             x, y, z = v.co.x, v.co.y, v.co.z
-            # Perky, rund: voelliger unten, oben nur leicht schmaler,
-            # dezenter Lift statt Haengen
             fullness = 1.0 + 0.14 * max(0.0, -y) - 0.10 * max(0.0, y)
             x *= fullness
-            y = y * fullness + 0.06 * (1.0 - z)   # leichter Lift nach oben
-            v.co = base + xax * (x * Rb) + yax * (y * Rb) + zax * (z * depth)
+            y = y * fullness + 0.06 * (1.0 - z)
+            sphere_co = base + xax * (x * Rb) + yax * (y * Rb) + zax * (z * depth)
+            # Rand weich in die Koerperoberflaeche einblenden: nahe der
+            # Frontspitze (grosses z) volle Kugel, zum Rand hin (kleines z)
+            # auf die naechste Koerperflaeche ziehen -> integrierte Woelbung
+            blend = max(0.0, min(1.0, (z + 0.30) / 0.75))  # 0=Rand ..1=Front
+            blend = blend * blend * (3 - 2 * blend)
+            _, k, _ = tree.find(sphere_co)
+            surf_pt = surf_data[k][0]
+            v.co = surf_pt.lerp(sphere_co, 0.15 + 0.85 * blend)
 
         new_faces = {f for v in verts for f in v.link_faces}
         for f in new_faces:
