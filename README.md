@@ -13,10 +13,11 @@ deinstallierbar.
 
 ## Features
 
-- **26 Meshes / 20+ Pal-Arten** inkl. Varianten: Bellanoir (+Libero), Bristla,
-  Carnibora, Dazzi (+Noct), Flopie, Gloopie (+Primo), Icelyn, Katress (+Ignis),
-  Lapure, Lovander, Lullu, Lunaris, Lyleen (+Noct), Nitemary (+Botan), Nyafia,
-  Petallia (+Ignis), Prunelia, Sekhmet, Selyne, Splatterina
+- **28 Meshes / 22 Pal-Arten** inkl. Varianten: Bellanoir (+Libero), Bristla,
+  Carnibora, Dazzi (+Noct), Elizabee, Flaracle, Flopie, Gloopie (+Primo),
+  Icelyn, Katress (+Ignis), Lapure, Lovander, Lullu, Lunaris, Lyleen (+Noct),
+  Nitemary (+Botan), Nyafia, Petallia (+Ignis), Prunelia, Sekhmet, Selyne,
+  Splatterina
 - **Größen-Slider im Spiel** (0.0–1.5) über ein UE4SS-Lua-Mod:
   Die Vergrößerung steckt als *Morph Target* im Mesh — bei Wert 0 sieht alles
   aus wie im Original-Spiel
@@ -27,7 +28,7 @@ deinstallierbar.
   verifiziert)
 - Rein clientseitig — andere Spieler auf Servern sehen nichts davon
 
-**Nicht enthalten:** Jelliette und Elizabee — deren Körperbau verträgt den
+**Nicht enthalten:** Jelliette — der Quallen-Körperbau verträgt den
 Morph (noch) nicht.
 
 ## Installation (Deutsch)

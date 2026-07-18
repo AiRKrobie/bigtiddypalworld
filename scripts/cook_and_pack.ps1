@@ -43,7 +43,7 @@ $ResponseFile = "$BuildDir\filelist.txt"
 # Nur die SkeletalMesh-Assets selbst kommen ins Pak. Skeleton-, Material- und
 # Physics-Platzhalter bleiben draussen, damit das Spiel seine Originale nutzt.
 # Ausgeschlossen: Meshes, deren Morph (noch) kaputt ist.
-$ExcludeMeshes = @("SK_JellyfishFairy", "SK_QueenBee")
+$ExcludeMeshes = @("SK_JellyfishFairy")
 $lines = Get-ChildItem $CookedDir -Recurse -File |
     Where-Object { $_.Extension -in ".uasset", ".uexp", ".ubulk" } |
     Where-Object { $_.BaseName -like "SK_*" -and $_.BaseName -notlike "*_Skeleton" -and
