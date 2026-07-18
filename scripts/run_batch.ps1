@@ -101,10 +101,12 @@ foreach ($job in $jobs) {
     $bones = ($out | Select-String "Bones Original=(\d+)\s+Mod=(\d+)").Matches
     $diffs = ($out | Select-String "dT=\d|FEHLT").Count
     $label = [IO.Path]::GetFileName($job.assetPath)
-    if ($bones.Count -gt 0 -and $bones[0].Groups[1].Value -eq $bones[0].Groups[2].Value -and $diffs -eq 0) {
+    if ($bones -and $bones.Count -gt 0 -and $bones[0].Groups[1].Value -eq $bones[0].Groups[2].Value -and $diffs -eq 0) {
         Write-Host ("  OK   {0} ({1} Bones)" -f $label, $bones[0].Groups[1].Value)
+    } elseif (-not $bones -or $bones.Count -eq 0) {
+        Write-Host ("  SKIP {0}: nicht im Pak (ausgeschlossen?)" -f $label)
     } else {
-        Write-Host ("  DIFF {0}: Bones={1} Abweichungen={2}" -f $label, ($bones | ForEach-Object { $_.Groups[2].Value }), $diffs)
+        Write-Host ("  DIFF {0}: Bones={1} Abweichungen={2}" -f $label, $bones[0].Groups[2].Value, $diffs)
         $bad++
     }
 }
