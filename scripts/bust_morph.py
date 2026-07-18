@@ -427,25 +427,24 @@ def generate_bikini(bm, breast_info, mat_idx, up, side, front):
         bmesh.ops.delete(bm, geom=[v for v, k in zip(cverts, keep) if not k],
                          context="VERTS")
         cverts = [v for v in cverts if v.is_valid]
-        fabric = Rb * 0.06
+        # Cup als klare Schale ueber der Brust: groesser skaliert und deutlich
+        # abgehoben -> kein z-fighting mit der Brust darunter
+        fabric = Rb * 0.14
         for v in cverts:
             x, y, z = v.co.x, v.co.y, v.co.z
             fn = 1.0 + 0.20 * max(0.0, -y) - 0.06 * max(0.0, y)
-            p = (base + xax * (x * Rb * fn * 1.04)
-                 + yax * (y * Rb * fn * 1.04) + zax * (z * depth * 1.04))
+            p = (base + xax * (x * Rb * fn * 1.08)
+                 + yax * (y * Rb * fn * 1.08) + zax * (z * depth * 1.08))
             n = (p - base).normalized()
             v.co = p + n * fabric
         for f in {f for v in cverts for f in v.link_faces}:
             f.material_index = mat_idx
             f.smooth = True
 
-        # Halterband: Cup-Oberkante (innen) hoch zum Nacken
+        # Nur Halterband: Cup-Oberkante (innen) hoch zum Nacken.
+        # Keine losen Seitenbaender (hingen im Spiel runter).
         top_in = base + xax * (-sgn * 0.30 * Rb) + yax * (0.55 * Rb) + zax * (0.55 * depth)
         _make_strap(bm, top_in, neck, Rb * 0.05, mat_idx)
-        # Seitenband: Cup-Aussenkante um die Seite nach hinten
-        outer = base + xax * (sgn * 0.85 * Rb) + yax * (0.10 * Rb) + zax * (0.30 * depth)
-        back = outer - front * (Rb * 2.0) + side * (sgn * Rb * 0.1)
-        _make_strap(bm, outer, back, Rb * 0.05, mat_idx)
 
 
 def add_breast_bones(body, mesh, armature, breast_info, height):
