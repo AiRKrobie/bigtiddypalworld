@@ -79,8 +79,11 @@ Write-Host "== Verifiziere Skelette =="
 $bad = 0
 foreach ($job in $jobs) {
     $meshPath = "Pal/Content" + $job.assetPath.Substring(5)
-    $out = dotnet run --project "$Root\src\PalExporter" -c Release --no-build -- `
-        --paks $Paks --usmap $Usmap --verify-pak "$Root\build" --mesh $meshPath 2>&1
+    $out = ""
+    try {
+        $out = dotnet run --project "$Root\src\PalExporter" -c Release --no-build -- `
+            --paks $Paks --usmap $Usmap --verify-pak "$Root\build" --mesh $meshPath 2>&1
+    } catch { $out = "$_" }
     $bones = ($out | Select-String "Bones Original=(\d+)\s+Mod=(\d+)").Matches
     $diffs = ($out | Select-String "dT=\d|FEHLT").Count
     $label = [IO.Path]::GetFileName($job.assetPath)

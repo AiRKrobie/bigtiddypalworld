@@ -28,10 +28,12 @@ PSK_ADDON_ZIP = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__f
 
 # Bones, die das Hoehenband definieren
 BAND_LOWER_BONES = ("spine_02", "spine02")
-BAND_UPPER_BONES = ("clavicle_l", "clavicle_r", "neck")
+BAND_UPPER_BONES = ("clavicle_l", "clavicle_r", "neck",
+                    "shoulder_l", "shoulder_r", "head")
 # Bones, auf die Anker-Vertices gewichtet sein muessen
 CHEST_WEIGHT_BONES = ("spine_02", "spine02", "spine_03", "spine03",
-                      "chest", "breast", "bust", "clavicle_l", "clavicle_r")
+                      "chest", "breast", "bust", "clavicle_l", "clavicle_r",
+                      "shoulder_l", "shoulder_r")
 MIN_WEIGHT = 0.10
 # Brustfell u. ae. wird MIT verschoben (liegt als Schale ueber der Brust)
 COMPANION_BONE_HINTS = ("fur", "hair")

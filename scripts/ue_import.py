@@ -46,8 +46,13 @@ def ensure_placeholder_material(asset_path):
     return mat
 
 
-def import_fbx(fbx, dest_path, dest_name):
+def import_fbx(fbx, dest_path, dest_name, existing_skeleton=None):
     ui = unreal.FbxImportUI()
+    if existing_skeleton is not None:
+        # Ziel-Skeleton existiert schon (z. B. Varianten-Mesh derselben Art):
+        # direkt als Import-Option setzen -- die Skeleton-Property des Meshes
+        # ist nachtraeglich read-only.
+        ui.skeleton = existing_skeleton
     ui.import_mesh = True
     ui.import_as_skeletal = True
     ui.import_animations = False
@@ -90,12 +95,6 @@ def relocate_skeleton(sk, target_path):
     current_path = current.get_path_name().split(".")[0]
     if current_path == target_path:
         return current
-    if EAL.does_asset_exist(target_path):
-        # Original-Platzhalter existiert schon (frueherer Lauf): zuweisen
-        target = unreal.load_asset(target_path)
-        sk.set_editor_property("skeleton", target)
-        EAL.delete_asset(current_path)
-        return target
     if not EAL.rename_asset(current_path, target_path):
         raise RuntimeError(f"Skeleton-Umzug fehlgeschlagen: {current_path} -> {target_path}")
     log(f"Skeleton verschoben: {target_path}")
@@ -129,16 +128,28 @@ def main():
     with open(jobs_file, encoding="utf-8-sig") as f:
         jobs = json.load(f)
 
+    ok, errors = 0, []
     for job in jobs:
         dest_path, dest_name = job["assetPath"].rsplit("/", 1)
         log(f"=== {dest_name} ===")
-        sk = import_fbx(job["fbx"], dest_path, dest_name)
-        relocate_skeleton(sk, job["skeletonPath"])
-        assign_materials(sk, job["materials"])
-        EAL.save_asset(job["assetPath"])
-        log(f"Gespeichert: {job['assetPath']}")
+        try:
+            existing = None
+            if EAL.does_asset_exist(job["skeletonPath"]):
+                existing = unreal.load_asset(job["skeletonPath"])
+            sk = import_fbx(job["fbx"], dest_path, dest_name, existing)
+            if existing is None:
+                relocate_skeleton(sk, job["skeletonPath"])
+            assign_materials(sk, job["materials"])
+            EAL.save_asset(job["assetPath"])
+            log(f"Gespeichert: {job['assetPath']}")
+            ok += 1
+        except Exception as ex:
+            errors.append(f"{dest_name}: {ex}")
+            log(f"FEHLER bei {dest_name}: {ex}")
 
-    log(f"Fertig: {len(jobs)} Mesh(es) importiert")
+    log(f"Fertig: {ok}/{len(jobs)} Mesh(es) importiert")
+    for e in errors:
+        log(f"  FEHLGESCHLAGEN: {e}")
 
 
 if __name__ == "__main__":
