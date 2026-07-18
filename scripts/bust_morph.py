@@ -58,6 +58,9 @@ def parse_args():
     p.add_argument("--no-export", action="store_true")
     p.add_argument("--bone-axis-primary", default="Y")
     p.add_argument("--bone-axis-secondary", default="X")
+    p.add_argument("--mode", choices=["generate", "dome"], default="generate",
+                   help="generate=eigene Brust-Geometrie erzeugen (Standard), "
+                        "dome=vorhandene Flaeche verformen (Legacy)")
     p.add_argument("--shapekey", action="store_true",
                    help="Morph als Shape Key 'BustSize' statt ins Basis-Mesh "
                         "backen (fuer Laufzeit-Slider via Morph Target)")
@@ -206,6 +209,132 @@ def subdivide_region(mesh, cand_idx, cuts):
     mesh.update()
 
 
+def generate_breasts(body, mesh, centers, front, side, R_lobe, H,
+                     candidates, weight_on, companion_ids, height):
+    """Erzeugt eigenstaendige Brust-Geometrie (glatte Teardrop-Halbkugeln,
+    18x12-Kugelaufloesung) und integriert sie ins Mesh:
+    - Position/Groesse aus der Bone-verankerten Analyse
+    - Skinning-Gewichte und UVs von der naechstgelegenen Koerperflaeche
+    - Material der Brustregion
+    Rueckgabe: {neuer_vertex_index: volle_Position}; die Basis-Positionen im
+    Mesh werden auf 'eingesunken' gesetzt (fuer den Morph-Target-Slider).
+    """
+    from collections import Counter
+    from mathutils.kdtree import KDTree
+
+    surface = [v for v in candidates if weight_on(v, companion_ids) < 0.5]
+    if len(surface) < 10:
+        raise RuntimeError("Zu wenig Koerperflaeche fuer Referenz")
+    # Snapshot als reine Daten: nach bm.to_mesh() sind die alten
+    # MeshVertex-Referenzen ungueltig (Crash bei Zugriff)
+    surf_data = [(v.co.copy(), [(g.group, g.weight) for g in v.groups],
+                  v.index) for v in surface]
+    tree = KDTree(len(surf_data))
+    for k, (co, _, _) in enumerate(surf_data):
+        tree.insert(co, k)
+    tree.balance()
+
+    # Per-Vertex-UV der Koerperflaeche (erste Loop-UV je Vertex)
+    uvl = mesh.uv_layers.active
+    vert_uv = {}
+    if uvl:
+        for poly in mesh.polygons:
+            for li in poly.loop_indices:
+                vi = mesh.loops[li].vertex_index
+                if vi not in vert_uv:
+                    vert_uv[vi] = tuple(uvl.data[li].uv)
+
+    # Haeufigstes Material der Brustregion
+    cand_set = {v.index for v in surface}
+    mats = Counter(p.material_index for p in mesh.polygons
+                   if any(mesh.loops[li].vertex_index in cand_set
+                          for li in p.loop_indices))
+    mat_index = mats.most_common(1)[0][0] if mats else 0
+
+    n_old = len(mesh.vertices)
+    bm = bmesh.new()
+    bm.from_mesh(mesh)
+
+    for i, c in enumerate(centers):
+        if len(centers) == 2:
+            out = side * (-1.0 if i == 0 else 1.0)
+        else:
+            out = Vector()
+        zax = (front * 0.92 + out * 0.13 + Vector((0.0, 0.0, -0.08))).normalized()
+        yax = (Vector((0.0, 0.0, 1.0)) - zax * zax.z).normalized()
+        xax = yax.cross(zax)
+
+        # Koerper-/Fell-Oberflaeche entlang der Dome-Achse finden
+        proj_max = 0.0
+        for v in candidates:
+            rel = v.co - c
+            p = rel.dot(zax)
+            lat = (rel - zax * p).length
+            if lat < R_lobe * 0.8:
+                proj_max = max(proj_max, p)
+
+        Rb = R_lobe * 0.72
+        sink = Rb * 0.45
+        depth = H + sink
+        base = c + zax * (proj_max - sink)
+
+        ret = bmesh.ops.create_uvsphere(bm, u_segments=18, v_segments=12,
+                                        radius=1.0)
+        verts = list(ret["verts"])
+        to_del = [v for v in verts if v.co.z < -0.25]
+        bmesh.ops.delete(bm, geom=to_del, context="VERTS")
+        verts = [v for v in verts if v.is_valid]
+
+        for v in verts:
+            x, y, z = v.co.x, v.co.y, v.co.z
+            # Teardrop: unten voller, oben schlanker, sanfter Sag
+            fullness = 1.0 + 0.16 * max(0.0, -y) - 0.18 * max(0.0, y)
+            x *= fullness
+            y = y * fullness - 0.10 * (1.0 - z)
+            v.co = base + xax * (x * Rb) + yax * (y * Rb) + zax * (z * depth)
+
+        new_faces = {f for v in verts for f in v.link_faces}
+        for f in new_faces:
+            f.smooth = True
+            f.material_index = mat_index
+
+    bm.to_mesh(mesh)
+    bm.free()
+    mesh.update()
+
+    new_idx = range(n_old, len(mesh.vertices))
+    full_pos = {}
+    nearest = {}
+    inward = front * (-0.015 * height)
+    for idx in new_idx:
+        v = mesh.vertices[idx]
+        full_pos[idx] = v.co.copy()
+        _, k, _ = tree.find(v.co)
+        nearest[idx] = k
+        src_co, src_groups, _ = surf_data[k]
+        # Gewichte der naechstgelegenen Koerperflaeche uebernehmen
+        for grp, w in src_groups:
+            body.vertex_groups[grp].add([idx], w, "REPLACE")
+        # Basis-Position: knapp unter die Koerperflaeche eingesunken
+        # (Slider 0 = unsichtbar, waechst von dort heraus)
+        v.co = src_co + inward
+
+    # UVs: neue Loops erben die UV der Referenzflaeche
+    uvl = mesh.uv_layers.active
+    if uvl:
+        ref_uv = {idx: vert_uv.get(surf_data[k][2], (0.5, 0.5))
+                  for idx, k in nearest.items()}
+        for poly in mesh.polygons:
+            for li in poly.loop_indices:
+                vi = mesh.loops[li].vertex_index
+                if vi >= n_old:
+                    uvl.data[li].uv = ref_uv[vi]
+
+    print(f"Generiert: 2x Teardrop-Halbkugel, {len(full_pos)} neue Vertices, "
+          f"Material-Slot {mat_index}")
+    return full_pos
+
+
 def main():
     args = parse_args()
     bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -220,8 +349,31 @@ def main():
     height = max(zs) - min(zs)
     print(f"Mesh-Hoehe: {height:.1f} Einheiten, {len(mesh.vertices)} Vertices")
 
-    # Pass 1: Region auf Original-Topologie bestimmen, dann unterteilen
+    # Pass 1: Region auf Original-Topologie bestimmen
     info = analyze(body, mesh, armature, front, side, height)
+    centers = info["centers"]
+    radius = info["radius"]
+
+    H = (args.factor - 1.0) * 0.5 * radius
+    H = min(H, 0.085 * height * (args.factor / 2.5))
+    print(f"Zentren={[tuple(round(x, 1) for x in c) for c in centers]}  "
+          f"Radius={radius:.1f}  Hoehe={H:.1f}  Modus={args.mode}")
+
+    chest_focus = (sum(centers, Vector()) / len(centers), radius * 3.5)
+    if args.render:
+        render_views(body, front, side, args.render + "_before", chest_focus)
+
+    if args.mode == "generate":
+        # Eigene Brust-Geometrie erzeugen statt vorhandene zu verformen
+        R_lobe = radius * (0.62 if len(centers) == 2 else 0.85)
+        displaced = generate_breasts(
+            body, mesh, centers, front, side, R_lobe, H,
+            info["candidates"], info["weight_on"], info["companion_ids"],
+            height)
+        finish(args, body, mesh, armature, front, side, displaced, chest_focus)
+        return
+
+    # --- Legacy: Dome-Verformung der vorhandenen Flaeche ---
     cand_idx = {v.index for v in info["candidates"]}
     cuts = 2 if len(info["anchors"]) < 70 else 1
     n_before = len(mesh.vertices)
@@ -238,17 +390,6 @@ def main():
     weight_on = info["weight_on"]
     companion_ids = info["companion_ids"]
     print(f"Anker: {len(anchors)} von {len(mesh.vertices)} Vertices")
-
-    # Dome-Hoehe: wie bisher skaliert und relativ zur Koerpergroesse gedeckelt
-    H = (args.factor - 1.0) * 0.5 * radius
-    H = min(H, 0.085 * height * (args.factor / 2.5))
-    print(f"Zentren={[tuple(round(x, 1) for x in c) for c in centers]}  "
-          f"Radius={radius:.1f}  Dome-Hoehe={H:.1f}  "
-          f"Region: {len(candidates)} Vertices")
-
-    chest_focus = (sum(centers, Vector()) / len(centers), radius * 3.5)
-    if args.render:
-        render_views(body, front, side, args.render + "_before", chest_focus)
 
     # Dome-Projektion: pro Seite eine Ziel-Halbkugel (leicht nach aussen und
     # unten geneigt). Koerper-Vertices werden AUF die Dome-Flaeche gehoben --
@@ -311,7 +452,10 @@ def main():
                 smoothed[i] = d
         deltas = smoothed
     displaced = {i: mesh.vertices[i].co + d for i, d in deltas.items()}
+    finish(args, body, mesh, armature, front, side, displaced, chest_focus)
 
+
+def finish(args, body, mesh, armature, front, side, displaced, chest_focus):
     if args.shapekey:
         # Basis bleibt Original; Morph landet im Shape Key "BustSize",
         # den UE als Morph Target importiert (Laufzeit-Steuerung)
