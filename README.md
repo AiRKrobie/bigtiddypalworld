@@ -18,13 +18,15 @@ deinstallierbar.
   Icelyn, Katress (+Ignis), Lapure, Lovander, Lullu, Lunaris, Lyleen (+Noct),
   Nitemary (+Botan), Nyafia, Petallia (+Ignis), Prunelia, Sekhmet, Selyne,
   Splatterina
-- **Größen-Slider im Spiel** (0.0–1.5) über ein UE4SS-Lua-Mod:
-  Die Vergrößerung steckt als *Morph Target* im Mesh — bei Wert 0 sieht alles
-  aus wie im Original-Spiel
-- **Eigens generierte Geometrie**: Seit v1.2.0 werden echte, glatte
-  Teardrop-Brüste als neue Geometrie erzeugt und ins Mesh integriert
-  (mit übernommenen Skinning-Gewichten, UVs und Material) — statt den
-  vorhandenen Brustkorb nur zu verformen
+- **Eigens generierte Geometrie**: Echte, runde Brüste werden als neue
+  Geometrie erzeugt und ins Mesh integriert (mit übernommenen
+  Skinning-Gewichten, UVs und Material) — statt den vorhandenen Brustkorb
+  nur zu verformen
+- **Fest ins Mesh gebacken** (seit v2.0.0): keine Morph-Targets, kein Slider
+  mehr nötig. Die Form ist immer sichtbar und kann nicht mehr durch einen
+  falschen Slider-Zustand verzerrt oder unsichtbar werden — das war zuvor
+  die häufigste Fehlerquelle. Größe pro Pal über
+  [`data/pal_overrides.json`](data/pal_overrides.json) beim Selbstbauen
 - **Original-Animationen, -Texturen und -Materialien** bleiben vollständig
   erhalten (Referenz-Skelett wird beim Bauen bit-genau gegen das Original
   verifiziert)
@@ -40,11 +42,7 @@ mit UE4SS-Einrichtung. Kurzfassung:
 
 1. `zzz_BustMod_P.pak` (aus den [Releases](../../releases)) nach
    `Palworld\Pal\Content\Paks\~mods\` kopieren (Ordner ggf. anlegen)
-2. Für den Slider: [UE4SS](https://docs.ue4ss.com/) installieren und den
-   Ordner `BustSliderMod` aus dem Release nach
-   `Palworld\Pal\Binaries\Win64\ue4ss\Mods\` kopieren, dann in der
-   `Mods\mods.txt` die Zeile `BustSliderMod : 1` ergänzen
-3. Spiel starten — **F7** größer, **F6** kleiner, Wert wird gespeichert
+2. Spiel starten — fertig. **Kein UE4SS und kein Slider nötig.**
 
 Deinstallation: die `.pak` aus `~mods` löschen, fertig.
 
@@ -218,11 +216,8 @@ und `scripts/run_batch.ps1`.
 
 1. Download `zzz_BustMod_P.pak` from [Releases](../../releases) and drop it
    into `Palworld\Pal\Content\Paks\~mods\` (create the folder if needed).
-2. Optional size slider: install [UE4SS](https://docs.ue4ss.com/), copy the
-   `BustSliderMod` folder into `Palworld\Pal\Binaries\Win64\ue4ss\Mods\`,
-   add `BustSliderMod : 1` to `Mods\mods.txt`.
-3. In game: **F7** = bigger, **F6** = smaller (0.0–1.5, persisted).
-   At 0.0 everything looks vanilla. Uninstall = delete the pak. Client-side only.
+2. Start the game — done. **No UE4SS, no slider needed** (the shape is baked
+   into the mesh since v2.0.0). Uninstall = delete the pak. Client-side only.
 
 ## Disclaimer
 
