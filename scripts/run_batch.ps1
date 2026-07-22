@@ -51,8 +51,10 @@ foreach ($entry in $manifest) {
             if ($o.cleavage) { $extraArgs += @("--cleavage", $o.cleavage) }
         }
         Write-Host "== Morphe $name ($($entry.display), Faktor $meshFactor) =="
+        # Fest ins Mesh gebacken (KEIN --shapekey): immer sichtbar, keine
+        # Slider-/Morph-Target-Fragilitaet. --ao setzt AO-Vertex-Farben.
         & $Blender --background --python "$Root\scripts\bust_morph.py" -- `
-            --input $psk --output $fbx --factor $meshFactor --shapekey `
+            --input $psk --output $fbx --factor $meshFactor --ao `
             @extraArgs `
             --render "$Root\work\renders\$name" > "$Root\work\renders\$name.log"
         if (-not (Select-String -Path "$Root\work\renders\$name.log" -Pattern "Exportiert" -Quiet)) {
