@@ -69,6 +69,13 @@ def import_fbx(fbx, dest_path, dest_name, existing_skeleton=None):
     sk_data.set_editor_property("convert_scene", True)
     # Einheiten werden Blender-seitig auf cm gebracht; UE liest Werte roh
     sk_data.set_editor_property("convert_scene_unit", False)
+    # Vertex-Farben (AO-Schatten) uebernehmen
+    try:
+        sk_data.set_editor_property(
+            "vertex_color_import_option",
+            unreal.VertexColorImportOption.REPLACE)
+    except Exception as ex:
+        log(f"Vertex-Color-Option nicht gesetzt: {ex}")
 
     task = unreal.AssetImportTask()
     task.filename = fbx

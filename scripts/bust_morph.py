@@ -63,6 +63,9 @@ def parse_args():
                         "dome=vorhandene Flaeche verformen (Legacy)")
     p.add_argument("--bikini", action="store_true",
                    help="Bikini-Top als Geometrie ueber den Bruesten erzeugen")
+    p.add_argument("--ao", action="store_true",
+                   help="AO-Vertex-Farben (Cleavage+Unterbrust-Schatten) fuer "
+                        "Definition unter flachem Licht")
     p.add_argument("--jiggle", action="store_true",
                    help="Jiggle-Bones (breast_l/r) hinzufuegen und die "
                         "Geometrie daran binden (fuer Physik im Spiel)")
@@ -216,7 +219,7 @@ def subdivide_region(mesh, cand_idx, cuts):
 
 def generate_breasts(body, mesh, centers, front, side, R_lobe, H,
                      candidates, weight_on, companion_ids, height,
-                     make_bikini=False):
+                     make_bikini=False, make_ao=False):
     """Erzeugt eigenstaendige Brust-Geometrie (glatte Teardrop-Halbkugeln,
     18x12-Kugelaufloesung) und integriert sie ins Mesh:
     - Position/Groesse aus der Bone-verankerten Analyse
@@ -378,6 +381,36 @@ def generate_breasts(body, mesh, centers, front, side, R_lobe, H,
         target = next((b for b in breast_info if b["side"] == s), breast_info[0])
         target["vidx"].append(idx)
 
+    # --- AO-Vertex-Farben: Cleavage + Unterbrust abdunkeln ---
+    # Unter Palworlds flachem Licht liest eingebackener Schatten immer. Wir
+    # legen ihn als Vertex-Farbe auf die Brust (dunkel = Schatten, weiss = hell).
+    if make_ao:
+        col = mesh.color_attributes.get("AO") or mesh.color_attributes.new(
+            name="AO", type="BYTE_COLOR", domain="POINT")
+        white = (1.0, 1.0, 1.0, 1.0)
+        for i in range(len(mesh.vertices)):
+            col.data[i].color = white
+        for bi in breast_info:
+            base, Rb = bi["base"], bi["Rb"]
+            for idx in bi["vidx"]:
+                p = full_pos[idx]
+                lat = abs(p.dot(side))                       # Abstand zur Mitte
+                vrel = (p.z - base.z) / Rb                   # >0 oben, <0 unten
+                # Cleavage: nahe Mittellinie -> dunkel
+                cleav = max(0.0, 1.0 - lat / (Rb * 0.55))
+                # Unterbrust: unteres Drittel -> dunkel
+                under = max(0.0, (-vrel - 0.15)) * 1.3
+                shade = min(0.72, max(cleav * 0.6, min(1.0, under) * 0.68))
+                g = 1.0 - shade
+                col.data[idx].color = (g, g, g, 1.0)
+        try:
+            mesh.color_attributes.active_color = col
+            mesh.color_attributes.render_color_index = \
+                list(mesh.color_attributes).index(col)
+        except Exception as ex:
+            print(f"Aktive Farbe setzen fehlgeschlagen: {ex}")
+        print(f"AO-Vertex-Farben gesetzt (Cleavage + Unterbrust)")
+
     print(f"Generiert: 2x Teardrop-Halbkugel, {len(full_pos)} neue Vertices, "
           f"Material-Slot {mat_index}")
     return full_pos, breast_info
@@ -525,7 +558,7 @@ def main():
         displaced, breast_info = generate_breasts(
             body, mesh, centers, front, side, R_lobe, H,
             info["candidates"], info["weight_on"], info["companion_ids"],
-            height, make_bikini=args.bikini)
+            height, make_bikini=args.bikini, make_ao=args.ao)
         bones = []
         if args.jiggle:
             bones = add_breast_bones(body, mesh, armature, breast_info, height)
@@ -652,6 +685,9 @@ def finish(args, body, mesh, armature, front, side, displaced, chest_focus):
         # FBX-Export keine Einheiten-Umrechnung draufmultipliziert
         bpy.context.scene.unit_settings.scale_length = 0.01
         bpy.ops.object.select_all(action="SELECT")
+        fbx_extra = {}
+        if getattr(args, "ao", False):
+            fbx_extra["colors_type"] = "SRGB"   # Vertex-Farben (AO) exportieren
         bpy.ops.export_scene.fbx(
             filepath=args.output,
             use_selection=True,
@@ -662,6 +698,7 @@ def finish(args, body, mesh, armature, front, side, displaced, chest_focus):
             apply_unit_scale=True,
             primary_bone_axis=args.bone_axis_primary,
             secondary_bone_axis=args.bone_axis_secondary,
+            **fbx_extra,
         )
         print(f"Exportiert: {args.output}")
 
@@ -672,9 +709,14 @@ def render_views(body, front, side, prefix, focus=None):
     scene.render.resolution_x = 720
     scene.render.resolution_y = 1080
     scene.render.image_settings.file_format = "PNG"
-    # Material-Farben zeigen (damit der Bikini sichtbar wird)
+    # Farben zeigen: Vertex-Farben (AO) bevorzugt, sonst Material (Bikini)
     try:
-        scene.display.shading.color_type = "MATERIAL"
+        has_ao = body.data.color_attributes.get("AO") is not None
+        if has_ao:
+            scene.display.shading.color_type = "VERTEX"
+            scene.display.shading.light = "FLAT"   # reine Vertex-Farben zeigen
+        else:
+            scene.display.shading.color_type = "MATERIAL"
     except Exception:
         pass
 
