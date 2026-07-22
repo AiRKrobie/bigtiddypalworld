@@ -1,0 +1,7 @@
+{
+  "_kommentar": "Per-Mesh-Feintuning; fehlende Eintraege nutzen die Batch-Defaults",
+  "SK_Sekhmet": { "factor": 1.7 },
+  "SK_NightLady": { "factor": 2.3 },
+  "SK_LilyQueen": { "factor": 1.9 },
+  "SK_LilyQueen_Ice": { "factor": 1.9 }
+}

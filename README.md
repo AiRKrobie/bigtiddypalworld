@@ -1,70 +1,225 @@
-# Palworld Body-Mod Pipeline
+# Big Tiddy Palworld
 
-Pipeline zum Erstellen eines Körper-Mods (vergrößerte Oberweite) für den
-weiblichen Spielercharakter in Palworld.
+Body-Mod für 20+ weibliche Pals in **Palworld** — mit stufenlosem
+**Größen-Slider im Spiel** (F6/F7). Clientseitig, jederzeit rückstandslos
+deinstallierbar.
 
-## Rahmenbedingungen
+*Body mod for 20+ female Pals in Palworld with an in-game size slider —
+[English quick install below](#english-quick-install).*
 
-- **Spiel:** Palworld (Steam), `M:\SteamLibrary\steamapps\common\Palworld`
-- **Engine:** Unreal Engine **5.1** (im Spiel-Binary verifiziert: `+UE5+Release-5.1`)
-- **Pak-Format:** klassisches `.pak` (`Pal-Windows.pak`, ~38 GB), kein IoStore
-- **Mod-Typ:** clientseitiger Pak-Mod in `Pal/Content/Paks/~mods` — überschreibt
-  Original-Assets, ohne Spieldateien anzufassen. Andere Spieler sehen die
-  Änderung nicht.
+![Lovander Vorher/Nachher](docs/img/gallery/SK_PinkLizard.png)
 
-## Pipeline-Übersicht
+> Vorher/Nachher aller Modelle in der **[Galerie](#galerie--vorhernachher)** weiter unten.
+
+## Features
+
+- **28 Meshes / 22 Pal-Arten** inkl. Varianten: Bellanoir (+Libero), Bristla,
+  Carnibora, Dazzi (+Noct), Elizabee, Flaracle, Flopie, Gloopie (+Primo),
+  Icelyn, Katress (+Ignis), Lapure, Lovander, Lullu, Lunaris, Lyleen (+Noct),
+  Nitemary (+Botan), Nyafia, Petallia (+Ignis), Prunelia, Sekhmet, Selyne,
+  Splatterina
+- **Eigens generierte Geometrie**: Echte, runde Brüste werden als neue
+  Geometrie erzeugt und ins Mesh integriert (mit übernommenen
+  Skinning-Gewichten, UVs und Material) — statt den vorhandenen Brustkorb
+  nur zu verformen
+- **Fest ins Mesh gebacken** (seit v2.0.0): keine Morph-Targets, kein Slider
+  mehr nötig. Die Form ist immer sichtbar und kann nicht mehr durch einen
+  falschen Slider-Zustand verzerrt oder unsichtbar werden — das war zuvor
+  die häufigste Fehlerquelle. Größe pro Pal über
+  [`data/pal_overrides.json`](data/pal_overrides.json) beim Selbstbauen
+- **Original-Animationen, -Texturen und -Materialien** bleiben vollständig
+  erhalten (Referenz-Skelett wird beim Bauen bit-genau gegen das Original
+  verifiziert)
+- Rein clientseitig — andere Spieler auf Servern sehen nichts davon
+
+**Nicht enthalten:** Jelliette — der Quallen-Körperbau verträgt den
+Morph (noch) nicht.
+
+## Installation (Deutsch)
+
+Siehe **[INSTALLATION.md](INSTALLATION.md)** für die ausführliche Anleitung
+mit UE4SS-Einrichtung. Kurzfassung:
+
+1. `zzz_BustMod_P.pak` (aus den [Releases](../../releases)) nach
+   `Palworld\Pal\Content\Paks\~mods\` kopieren (Ordner ggf. anlegen)
+2. Spiel starten — fertig. **Kein UE4SS und kein Slider nötig.**
+
+Deinstallation: die `.pak` aus `~mods` löschen, fertig.
+
+## Galerie – Vorher/Nachher
+
+Alle enthaltenen Modelle bei Slider-Wert 1.0. Graustufen-Renders aus der Build-Pipeline (Blender Workbench).
+
+<details>
+<summary><b>Alle 28 Modelle anzeigen</b></summary>
+
+**Bellanoir**
+
+![Bellanoir](docs/img/gallery/SK_NightLady.png)
+
+**Bristla**
+
+![Bristla](docs/img/gallery/SK_LittleBriarRose.png)
+
+**Carnibora**
+
+![Carnibora](docs/img/gallery/SK_VenusFlytrap.png)
+
+**Dazzi**
+
+![Dazzi](docs/img/gallery/SK_RaijinDaughter.png)
+
+**Dazzi Noct**
+
+![Dazzi Noct](docs/img/gallery/SK_RaijinDaughter_Water.png)
+
+**Elizabee**
+
+![Elizabee](docs/img/gallery/SK_QueenBee.png)
+
+**Flaracle**
+
+![Flaracle](docs/img/gallery/SK_FoxExorcist.png)
+
+**Flopie**
+
+![Flopie](docs/img/gallery/SK_FlowerRabbit.png)
+
+**Gloopie**
+
+![Gloopie](docs/img/gallery/SK_OctopusGirl.png)
+
+**Gloopie Primo**
+
+![Gloopie Primo](docs/img/gallery/SK_OctopusGirl_Neutral.png)
+
+**Icelyn**
+
+![Icelyn](docs/img/gallery/SK_IceWitch.png)
+
+**Katress**
+
+![Katress](docs/img/gallery/SK_CatMage.png)
+
+**Katress Ignis**
+
+![Katress Ignis](docs/img/gallery/SK_CatMage_Fire.png)
+
+**Lapure**
+
+![Lapure](docs/img/gallery/SK_SleeveRabbit.png)
+
+**Lovander**
+
+![Lovander](docs/img/gallery/SK_PinkLizard.png)
+
+**Lullu**
+
+![Lullu](docs/img/gallery/SK_LeafPrincess.png)
+
+**Lunaris**
+
+![Lunaris](docs/img/gallery/SK_Mutant.png)
+
+**Lyleen**
+
+![Lyleen](docs/img/gallery/SK_LilyQueen.png)
+
+**Lyleen (Ice)**
+
+![Lyleen Ice](docs/img/gallery/SK_LilyQueen_Ice.png)
+
+**Nitemary**
+
+![Nitemary](docs/img/gallery/SK_GhostRabbit.png)
+
+**Nitemary Botan**
+
+![Nitemary Botan](docs/img/gallery/SK_GhostRabbit_Grass.png)
+
+**Nyafia**
+
+![Nyafia](docs/img/gallery/SK_BadCatgirl.png)
+
+**Petallia**
+
+![Petallia](docs/img/gallery/SK_FlowerDoll.png)
+
+**Petallia Ignis**
+
+![Petallia Ignis](docs/img/gallery/SK_FlowerDoll_Fire.png)
+
+**Prunelia**
+
+![Prunelia](docs/img/gallery/SK_BlueberryFairy.png)
+
+**Sekhmet**
+
+![Sekhmet](docs/img/gallery/SK_Sekhmet.png)
+
+**Selyne**
+
+![Selyne](docs/img/gallery/SK_MoonQueen.png)
+
+**Splatterina**
+
+![Splatterina](docs/img/gallery/SK_GrimGirl.png)
+
+</details>
+
+## Selbst bauen (Pipeline)
+
+Das Repo enthält die komplette, automatisierte Build-Pipeline — es werden
+**keine Spiel-Assets** mitgeliefert, alles wird lokal aus der eigenen
+Palworld-Installation extrahiert:
 
 ```
-FModel                Blender                    UE 5.1              UnrealPak
-  │                      │                          │                    │
-  │ Mesh als glTF        │ scripts/                 │ Import als         │ Cooked Assets
-  │ exportieren     ───► │ bust_morph.py       ───► │ Skeletal Mesh, ───►│ als .pak
-  │ (+ Skelett,          │ (Vertices morphen,       │ Original-Pfade,    │ packen,
-  │  Weights)            │  FBX exportieren)        │ cooken             │ nach ~mods
+PalExporter (CUE4Parse)      Blender 5.x headless           UE 5.1 headless
+.psk + manifest.json    ->   bust_morph.py                ->  ue_import.py     -> cook_and_pack.ps1
+(UE-Koordinaten, cm)         (Morph als Shape Key             (Import an           (Pak bauen,
+                              "BustSize", QA-Renders)          Original-Pfade)      verifizieren,
+                                                                                    installieren)
 ```
 
-## Schritte im Detail
+Voraussetzungen: Palworld (Steam), [Blender 5.x](https://www.blender.org/)
+mit [io_scene_psk_psa](https://github.com/DarklightGames/io_scene_psk_psa),
+[Unreal Engine 5.1](https://www.unrealengine.com/), .NET-10-SDK, eine zur
+Spielversion passende `Mappings.usmap`
+(z. B. aus [PalworldModding/UsefulFiles](https://github.com/PalworldModding/UsefulFiles)).
 
-### 1. Assets extrahieren (FModel)
+```powershell
+# 1. Meshes + Metadaten aus dem Spiel exportieren
+dotnet run --project src/PalExporter -c Release -- `
+    --paks "<Palworld>\Pal\Content\Paks" --usmap tools\mappings\Palworld.usmap `
+    --targets data\target_pals.txt --out export
 
-1. `tools/FModel/FModel.exe` starten
-2. Game Directory: `M:\SteamLibrary\steamapps\common\Palworld\Pal\Content\Paks`
-3. UE-Version: `GAME_UE5_1`
-4. **Mappings:** Palworld nutzt unversionierte Properties — FModel braucht eine
-   `.usmap`-Datei (liegt nach Setup unter `tools/mappings/`).
-5. Zum weiblichen Player-Mesh navigieren (unter
-   `Pal/Content/Pal/Model/Character/Player/`), als **glTF** exportieren
-   (Settings → Models → Gltf2, "Export Materials" an).
-6. Export nach `export/` legen.
-
-### 2. Mesh morphen (Blender)
-
-```
-blender --background --python scripts/bust_morph.py -- ^
-    --input export/<mesh>.gltf --output work/morphed.fbx --factor 1.6
+# 2. Alles morphen, importieren, cooken, packen, verifizieren, installieren
+.\scripts\run_batch.ps1 -Factor 2.5 -Install
 ```
 
-Das Skript selektiert die Brustregion (über Bone-Weights + räumliche
-Eingrenzung), verschiebt die Vertices entlang ihrer Normalen mit weichem
-Falloff und exportiert als FBX. Skelett, Vertex-Anzahl und Weights bleiben
-unverändert. `--factor` steuert die Stärke (1.0 = unverändert).
+Pfade (Engine, Spiel, Blender) stehen am Kopf von `scripts/cook_and_pack.ps1`
+und `scripts/run_batch.ps1`.
 
-### 3. In UE 5.1 cooken
+## Technische Details
 
-1. Leeres UE-5.1-Projekt `ue_project/` (Blank, ohne Starter Content)
-2. FBX als Skeletal Mesh importieren — **exakt derselbe Content-Pfad** wie im
-   Original (z. B. `/Game/Pal/Model/Character/Player/...`)
-3. Material-Slots benennen wie im Original (Slot-Namen aus FModel ablesen)
-4. Cooken: siehe `scripts/cook_and_pack.ps1`
+- Der Export läuft über **ActorX (.psk)** statt glTF — glTF spiegelt das
+  Koordinatensystem und invertiert damit alle Bone-Rotationen (kaputte
+  Animationen). Die Lektion steht ausführlich in der Git-Historie.
+- Ins Pak kommen **nur die SkeletalMesh-Assets**; Skeleton, Materialien und
+  PhysicsAsset bleiben Platzhalter und lösen zur Laufzeit auf die Originale
+  des Spiels auf.
+- `PalExporter --verify-pak` vergleicht nach jedem Build das Referenz-Skelett
+  jedes Meshes Knochen für Knochen (Namen, Hierarchie, Transforms) mit dem
+  Original — erst bei null Abweichungen wird installiert.
 
-### 4. Packen & installieren
+## English Quick Install
 
-`scripts/cook_and_pack.ps1` ruft UnrealPak aus der UE-Installation auf,
-verpackt die gecookten Assets als `zzz_BustMod_P.pak` und kopiert sie nach
-`Pal/Content/Paks/~mods/`. Suffix `_P` ist Pflicht (Patch-Pak, überschreibt
-Originale). **Palworld muss dafür geschlossen sein** — Paks werden nur beim
-Spielstart geladen.
+1. Download `zzz_BustMod_P.pak` from [Releases](../../releases) and drop it
+   into `Palworld\Pal\Content\Paks\~mods\` (create the folder if needed).
+2. Start the game — done. **No UE4SS, no slider needed** (the shape is baked
+   into the mesh since v2.0.0). Uninstall = delete the pak. Client-side only.
 
-## Deinstallation
+## Disclaimer
 
-`zzz_BustMod_P.pak` aus `~mods` löschen. Fertig.
+Dieses Repo enthält keine Assets von Pocketpair. Nutzung auf eigene Gefahr;
+nicht für den Einsatz auf Servern gedacht, deren Regeln Mods untersagen.

@@ -10,8 +10,15 @@ output/
 # FModel-Ausgaben
 Saved/
 
-# Unreal-Engine-Projekt (zu groß für Git, wird lokal erzeugt)
-ue_project/
+# Unreal-Engine-Projekt: nur Projektdatei/Config versionieren
+ue_project/**/Intermediate/
+ue_project/**/Saved/
+ue_project/**/DerivedDataCache/
+ue_project/**/Content/
+
+# .NET Build-Artefakte
+src/**/bin/
+src/**/obj/
 
 # Archive
 *.zip
@@ -20,3 +27,7 @@ ue_project/
 # Blender-Backups
 *.blend1
 *.blend2
+
+# Lokales Tooling (ruflo/claude-flow Daemon-State)
+.claude-flow/
+.claude/
